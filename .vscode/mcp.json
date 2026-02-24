@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "us-gov-open-data": {
+      "command": "node",
+      "args": ["dist/server.js"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}

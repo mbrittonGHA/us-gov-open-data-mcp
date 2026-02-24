@@ -1,0 +1,113 @@
+{
+  "name": "us-gov-open-data-mcp",
+  "version": "1.0.0",
+  "description": "MCP server + standalone TypeScript SDK for 36 U.S. government and international data APIs — 188 tools. Covers Treasury, FRED, BLS, BEA, EIA, Census, FEC, Congress, Federal Register, USAspending, SEC, FBI, GovInfo, NOAA, USDA, World Bank, CDC, NAEP, College Scorecard, NREL, FDA, EPA, Senate Lobbying, Regulations.gov, USDA FoodData, FEMA, NHTSA, CMS, HUD, USPTO, CFPB, FDIC, DOL, USGS, ClinicalTrials.gov, BTS.",
+  "main": "dist/server.js",
+  "bin": {
+    "us-gov-open-data-mcp": "dist/server.js"
+  },
+  "exports": {
+    ".": "./dist/server.js",
+    "./client": "./dist/client.js",
+    "./sdk": "./dist/sdk/index.js",
+    "./sdk/*": "./dist/sdk/*.js"
+  },
+  "typesVersions": {
+    "*": {
+      "client": [
+        "dist/client.d.ts"
+      ],
+      "sdk": [
+        "dist/sdk/index.d.ts"
+      ],
+      "sdk/*": [
+        "dist/sdk/*.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "start:http": "node dist/server.js --transport httpStream --port 8080",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "treasury",
+    "fiscal-data",
+    "fec",
+    "census",
+    "fred",
+    "economic-data",
+    "usaspending",
+    "congress",
+    "federal-register",
+    "bls",
+    "bea",
+    "eia",
+    "noaa",
+    "usda",
+    "world-bank",
+    "cdc",
+    "naep",
+    "college-scorecard",
+    "nrel",
+    "fda",
+    "epa",
+    "lobbying",
+    "sec",
+    "fbi",
+    "fema",
+    "nhtsa",
+    "cms",
+    "hud",
+    "uspto",
+    "cfpb",
+    "fdic",
+    "dol",
+    "osha",
+    "regulations",
+    "usgs",
+    "earthquake",
+    "clinical-trials",
+    "bts",
+    "transportation",
+    "government",
+    "open-data",
+    "api",
+    "sdk",
+    "typescript"
+  ],
+  "author": "lzinga",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lzinga/us-gov-open-data-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lzinga/us-gov-open-data-mcp/issues"
+  },
+  "homepage": "https://github.com/lzinga/us-gov-open-data-mcp#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "fast-xml-parser": "^5.4.1",
+    "fastmcp": "^3.33.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

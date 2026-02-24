@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.cache/
+*.log
+.playwright-mcp/
+.vscode/settings.json
