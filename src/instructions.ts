@@ -135,8 +135,7 @@ HEALTH / HEALTHCARE:
   Context: Congress (congress_search_bills for 'healthcare', 'ACA', 'Medicare') → health legislation
   Context: Congress (congress_house_votes, congress_senate_votes) → how each party voted on health bills
   Context: Senate Lobbying (lobbying_search for healthcare, pharmaceutical) → who lobbied on health policy
-
-DRUG DEVELOPMENT / PHARMACEUTICAL:
+  Enrich: Open Payments (open_payments_search) → pharma payments to doctors by company, specialty, state
   Primary: ClinicalTrials (clinical_trials_search) → search trials by drug, condition, sponsor, phase
   Primary: ClinicalTrials (clinical_trials_detail) → full protocol, eligibility, locations
   Primary: ClinicalTrials (clinical_trials_stats) → pipeline activity by disease OR drug name (recruiting vs completed vs terminated)
@@ -155,6 +154,9 @@ DRUG DEVELOPMENT / PHARMACEUTICAL:
   Context: World Bank (SH.XPD.CHEX.PC.CD) → international drug pricing context
   Always: Compare industry-sponsored vs NIH-sponsored trial counts for the same condition
   Always: Use clinical_trials_stats with search_as_drug=true for drug names like 'semaglutide'
+  Enrich: Open Payments (open_payments_search) → how much the drug's manufacturer pays doctors — shows the promotion chain
+  Enrich: Open Payments (open_payments_research) → research funding from the manufacturer to doctors studying the drug
+  Enrich: Open Payments (open_payments_ownership) → doctors with ownership stakes in the manufacturer
 
 AGRICULTURE / FOOD PRICES:
   Primary: USDA NASS (usda_crop_data, usda_prices) → production and farm-gate prices
@@ -212,6 +214,28 @@ MEDICAL DEVICES / SAFETY:
   Enrich: Senate Lobbying (lobbying_search for device manufacturer) → lobbying by device companies
   Context: USPTO (uspto_search_patents) → patents for the device technology
   Context: Congress (congress_search_bills for 'medical device', '510(k)') → device regulation bills
+
+PHARMA PAYMENTS TO DOCTORS (SUNSHINE ACT):
+  Primary: Open Payments (open_payments_search) → exact payments from pharma companies to specific doctors
+  Primary: Open Payments (open_payments_research) → research grants and clinical trial funding to doctors
+  Primary: Open Payments (open_payments_ownership) → doctors with ownership/investment stakes in pharma companies (deepest conflict of interest)
+  Primary: Open Payments (open_payments_by_company) → total payments by company across all years
+  Primary: Open Payments (open_payments_summary) → national payment totals and trends
+  Enrich: Open Payments (open_payments_by_physician) → pre-grouped totals per doctor across all years
+  Enrich: Open Payments (open_payments_by_hospital) → total payments to teaching hospitals
+  Enrich: Open Payments (open_payments_by_specialty) → which medical specialties get the most pharma money
+  Enrich: FDA (fda_drug_events) → adverse events for the drugs being promoted
+  Enrich: FDA (fda_approved_drugs) → approval status of promoted drugs
+  Enrich: FDA (fda_drug_recalls) → any recalls for promoted drugs
+  Enrich: ClinicalTrials (clinical_trials_search) → ongoing trials for the drugs
+  Enrich: Senate Lobbying (lobbying_search) → how much the company spends lobbying Congress
+  Enrich: Senate Lobbying (lobbying_lobbyists) → who lobbies for the company
+  Enrich: FEC (fec_search_committees, fec_committee_disbursements) → company PAC donations to politicians
+  Enrich: SEC (sec_company_financials) → company revenue and profit
+  Context: BLS (bls_cpi_breakdown medical care) → healthcare cost inflation context
+  Context: World Bank (SH.XPD.CHEX.PC.CD) → U.S. vs international health spending
+  Always: Cross-reference company payments to doctors with FDA adverse events for the same company's drugs
+  Always: Compare company lobbying spend to their doctor payment spend — shows the full influence chain
 
 ENERGY / CLIMATE:
   Primary: EIA (petroleum, electricity, natural gas prices and production)
@@ -330,6 +354,9 @@ HEALTHCARE FACILITIES / QUALITY:
   Primary: CMS (cms_nursing_homes) → nursing home ratings, health citations, staffing
   Enrich: FDA (fda_device_events) → medical device adverse events at facilities
   Enrich: FDA (fda_device_recalls) → recalled medical devices
+  Enrich: Open Payments (open_payments_search) → pharma payments to doctors at teaching hospitals
+  Enrich: Open Payments (open_payments_by_hospital) → total pharma payments per teaching hospital
+  Enrich: Open Payments (open_payments_research) → research funding flowing to hospital-based doctors
   Enrich: CDC (cdc_places_health) → county-level health indicators where facilities operate
   Enrich: Census (population, demographics) → who is served by these facilities
   Enrich: USAspending (HHS/CMS spending) → Medicare/Medicaid spending
@@ -436,6 +463,8 @@ CONFLICT OF INTEREST / ACCOUNTABILITY / CORRUPTION / MONEY IN POLITICS:
     USAspending → did federal spending change after the legislation?
     CFPB (cfpb_complaint_trends) → did consumer complaints change?
     CDC (cdc_causes_of_death, cdc_mortality_rates) → if health-related: did health outcomes change?
+    Open Payments (open_payments_search) → if pharma: did payments to doctors increase after favorable legislation?
+    Open Payments (open_payments_ownership) → do doctors who prescribed/endorsed the drug have ownership stakes in the company?
 
   Step 6 — Who benefited from the aftermath:
     Senate Lobbying (lobbying_search) → did the benefiting companies increase lobbying after?

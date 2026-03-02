@@ -49,3 +49,4 @@ export * as worldBank from "./world-bank.js";
 export * as usgs from "./usgs.js";
 export * as clinicalTrials from "./clinical-trials.js";
 export * as bts from "./bts.js";
+export * as openPayments from "./open-payments.js";
