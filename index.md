@@ -5,7 +5,7 @@ title: US Government Open Data MCP
 
 # US Government Open Data MCP
 
-An MCP server + TypeScript SDK for **38 U.S. government and international data APIs** — 208 tools covering economic, fiscal, health, education, energy, environment, lobbying, housing, patents, safety, banking, consumer protection, workplace safety, transportation, seismic, clinical trials, pharma payments, research funding, and legislative data.
+An MCP server + TypeScript SDK for **39 U.S. government and international data APIs** — 212 tools covering economic, fiscal, health, education, energy, environment, lobbying, housing, patents, safety, banking, consumer protection, workplace safety, transportation, seismic, clinical trials, pharma payments, research funding, and legislative data.
 
 ## Quick Start
 
@@ -15,9 +15,9 @@ npx us-gov-open-data-mcp
 
 ## What It Does
 
-This server gives AI assistants (VS Code Copilot, Claude Desktop, Cursor) direct access to live data from 38 federal APIs. It cross-references data automatically — asking about a drug pulls FDA adverse events, clinical trials, NIH research grants, lobbying spend, and congressional activity in one query.
+This server gives AI assistants (VS Code Copilot, Claude Desktop, Cursor) direct access to live data from 39 federal APIs. It cross-references data automatically — asking about a drug pulls FDA adverse events, clinical trials, NIH research grants, lobbying spend, and congressional activity in one query.
 
-**20 APIs require no key at all.** The rest use free keys that take under a minute to get.
+**21 APIs require no key at all.** The rest use free keys that take under a minute to get.
 
 ## Example Analyses
 
@@ -95,7 +95,7 @@ Add to `claude_desktop_config.json`:
 
 ### API Keys
 
-20 APIs work with **no key at all**. For the rest, you have two options:
+21 APIs work with **no key at all**. For the rest, you have two options:
 
 **Option 1 — `.env` file** (recommended for local development):
 

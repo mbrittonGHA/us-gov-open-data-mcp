@@ -78,6 +78,7 @@ LEGISLATION / POLICY:
   Enrich: Federal Register (related executive orders) → implementation actions
   Enrich: Senate Lobbying (lobbying_search) → who lobbied for/against the bill and how much they spent
   Enrich: Regulations.gov (regulations_search_documents) → implementing regulations after the law passed
+  Enrich: DOJ News (doj_press_releases with title filter) → DOJ enforcement actions related to the legislation
   Always: Show party-line breakdown of votes vs economic outcome
   Always: Compare House vote and Senate vote for the same bill to show bicameral alignment/divergence
 
@@ -390,6 +391,7 @@ BANKING / FINANCIAL REGULATION:
   Enrich: Senate Lobbying (lobbying_search) → bank lobbying on financial regulation
   Context: Congress (search bills for 'banking', 'Dodd-Frank', 'financial regulation') → relevant legislation
   Context: Federal Register (fr_search_rules agency:CFPB or OCC or FDIC) → rulemaking activity
+  Context: DOJ News (doj_press_releases) → DOJ enforcement actions against banks (fraud, money laundering)
   Context: Federal Register (fr_agencies) → list all agencies for filtering rule searches
   Compare: FRED (TOTBKCR, BUSLOANS) → total bank credit and commercial lending trends
 
@@ -409,6 +411,7 @@ CONSUMER PROTECTION / FINANCIAL COMPLAINTS:
   Context: Congress (search bills for 'consumer protection', 'CFPB') → related legislation
   Context: Federal Register (fr_search_rules agency:CFPB) → CFPB rulemaking
   Context: Federal Register (fr_document_detail) → full detail on specific regulatory documents
+  Context: DOJ News (doj_press_releases) → DOJ enforcement actions against financial companies
 
 WORKPLACE SAFETY / LABOR:
   Primary: DOL (dol_osha_inspections) → OSHA workplace inspections by state, company, industry

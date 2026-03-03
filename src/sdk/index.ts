@@ -51,3 +51,4 @@ export * as clinicalTrials from "./clinical-trials.js";
 export * as bts from "./bts.js";
 export * as openPayments from "./open-payments.js";
 export * as nih from "./nih.js";
+export * as dojNews from "./doj-news.js";
