@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Tool } from "fastmcp";
 import { keysEnum, describeEnum } from "../enum-utils.js";
 import { searchFilings, getFilingDetail, searchContributions, searchRegistrants, searchClients, searchLobbyists, FILING_TYPES, ISSUE_CODES } from "../sdk/senate-lobbying.js";
+import { tableResponse, listResponse, recordResponse, emptyResponse } from "../response.js";
 
 export const name = "senate-lobbying";
 export const displayName = "Senate Lobbying Disclosures";
@@ -72,12 +73,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ registrant_name, client_name, issue_code, filing_year, filing_type, page_size }) => {
       const data = await searchFilings({ registrant_name, client_name, issue_code, filing_year, filing_type, page_size });
-      if (!data.results?.length) return "No lobbying filings found.";
-      return JSON.stringify({
-        summary: `Lobbying filings: ${data.count} total, showing ${data.results.length}`,
-        total: data.count,
-        filings: data.results.map(summarizeFiling),
-      });
+      if (!data.results?.length) return emptyResponse("No lobbying filings found.");
+      return listResponse(
+        `Lobbying filings: ${data.count} total, showing ${data.results.length}`,
+        { items: data.results.map(summarizeFiling), total: data.count },
+      );
     },
   },
 
@@ -92,20 +92,22 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ filing_uuid }) => {
       const f = await getFilingDetail(filing_uuid);
-      return JSON.stringify({
-        summary: `Lobbying filing: ${f.registrant?.name} for ${f.client?.name} (${f.filing_year} ${f.filing_type_display})`,
-        registrant: f.registrant?.name,
-        client: f.client?.name,
-        clientDescription: f.client?.general_description,
-        expenses: f.expenses ? `$${Number(f.expenses).toLocaleString()}` : null,
-        income: f.income ? `$${Number(f.income).toLocaleString()}` : null,
-        activities: f.lobbying_activities?.map((a: any) => ({
-          issue: a.general_issue_code_display,
-          description: a.description,
-          lobbyists: a.lobbyists?.map((l: any) => l.lobbyist_full_display_name).filter(Boolean),
-        })),
-        documentUrl: f.filing_document_url,
-      });
+      return recordResponse(
+        `Lobbying filing: ${f.registrant?.name} for ${f.client?.name} (${f.filing_year} ${f.filing_type_display})`,
+        {
+          registrant: f.registrant?.name,
+          client: f.client?.name,
+          clientDescription: f.client?.general_description,
+          expenses: f.expenses ? `$${Number(f.expenses).toLocaleString()}` : null,
+          income: f.income ? `$${Number(f.income).toLocaleString()}` : null,
+          activities: f.lobbying_activities?.map((a: any) => ({
+            issue: a.general_issue_code_display,
+            description: a.description,
+            lobbyists: a.lobbyists?.map((l: any) => l.lobbyist_full_display_name).filter(Boolean),
+          })),
+          documentUrl: f.filing_document_url,
+        },
+      );
     },
   },
 
@@ -123,7 +125,7 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ filing_year, registrant_name, lobbyist_name, page_size }) => {
       const data = await searchContributions({ filing_year, registrant_name, lobbyist_name, page_size });
-      if (!data.results?.length) return "No contribution filings found.";
+      if (!data.results?.length) return emptyResponse("No contribution filings found.");
 
       // Flatten nested contribution_items from each filing
       const allContributions: any[] = [];
@@ -146,12 +148,10 @@ export const tools: Tool<any, any>[] = [
 
       const filingsWithItems = data.results.filter((r: any) => r.contribution_items?.length > 0).length;
 
-      return JSON.stringify({
-        summary: `Lobbying contributions: ${data.count} filings total, ${filingsWithItems} with contribution items, ${allContributions.length} individual contributions`,
-        totalFilings: data.count,
-        filingsWithContributions: filingsWithItems,
-        contributions: allContributions.slice(0, 50),
-      });
+      return tableResponse(
+        `Lobbying contributions: ${data.count} filings total, ${filingsWithItems} with contribution items, ${allContributions.length} individual contributions`,
+        { rows: allContributions, total: data.count },
+      );
     },
   },
 
@@ -165,15 +165,18 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ name, page_size }) => {
       const data = await searchRegistrants({ registrant_name: name, page_size });
-      if (!data.results?.length) return `No registrants found matching "${name}".`;
-      return JSON.stringify({
-        summary: `Lobbying registrants matching "${name}": ${data.count} found`,
-        registrants: data.results.map((r: any) => ({
-          id: r.id, name: r.name, description: r.description,
-          address: `${r.address_1}, ${r.city}, ${r.state}`,
-          contact: r.contact_name, phone: r.contact_telephone,
-        })),
-      });
+      if (!data.results?.length) return emptyResponse(`No registrants found matching "${name}".`);
+      return listResponse(
+        `Lobbying registrants matching "${name}": ${data.count} found`,
+        {
+          items: data.results.map((r: any) => ({
+            id: r.id, name: r.name, description: r.description,
+            address: `${r.address_1}, ${r.city}, ${r.state}`,
+            contact: r.contact_name, phone: r.contact_telephone,
+          })),
+          total: data.count,
+        },
+      );
     },
   },
 
@@ -190,14 +193,17 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ name, firm, page_size }) => {
       const data = await searchLobbyists({ lobbyist_name: name, registrant_name: firm, page_size });
-      if (!data.results?.length) return `No lobbyists found.`;
-      return JSON.stringify({
-        summary: `Lobbyists: ${data.count} found`,
-        results: data.results.map((r: any) => ({
-          name: `${r.prefix ?? ""} ${r.first_name ?? ""} ${r.last_name ?? ""}${r.suffix ? " " + r.suffix : ""}`.trim(),
-          firm: r.registrant?.name,
-        })),
-      });
+      if (!data.results?.length) return emptyResponse(`No lobbyists found.`);
+      return listResponse(
+        `Lobbyists: ${data.count} found`,
+        {
+          items: data.results.map((r: any) => ({
+            name: `${r.prefix ?? ""} ${r.first_name ?? ""} ${r.last_name ?? ""}${r.suffix ? " " + r.suffix : ""}`.trim(),
+            firm: r.registrant?.name,
+          })),
+          total: data.count,
+        },
+      );
     },
   },
 ];

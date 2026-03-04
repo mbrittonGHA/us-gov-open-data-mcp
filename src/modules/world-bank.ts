@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { Tool, InputPrompt } from "fastmcp";
 import { getIndicator, compareCountries, searchIndicators, listCountries, POPULAR_INDICATORS } from "../sdk/world-bank.js";
+import { timeseriesResponse, tableResponse, listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -41,15 +42,18 @@ export const tools: Tool<any, any>[] = [
         country: country ?? "US",
         dateRange: date_range ?? `${now - 10}:${now}`,
       });
-      if (!result.data.length) return `No data for indicator ${indicator} in ${country ?? "US"}.`;
+      if (!result.data.length) return emptyResponse(`No data for indicator ${indicator} in ${country ?? "US"}.`);
       const valid = result.data.filter(d => d.value !== null);
-      return JSON.stringify({
-        summary: `${result.data[0]?.indicator?.value ?? indicator}: ${valid.length} data points for ${result.data[0]?.country?.value ?? country}`,
-        indicator: result.data[0]?.indicator,
-        country: result.data[0]?.country,
-        total: result.total,
-        data: valid.map(d => ({ year: d.date, value: d.value })),
-      });
+      return timeseriesResponse(
+        `${result.data[0]?.indicator?.value ?? indicator}: ${valid.length} data points for ${result.data[0]?.country?.value ?? country}`,
+        {
+          rows: valid.map(d => ({ year: d.date, value: d.value })),
+          dateKey: "year",
+          valueKey: "value",
+          total: result.total,
+          meta: { indicator: result.data[0]?.indicator, country: result.data[0]?.country },
+        },
+      );
     },
   },
 
@@ -68,7 +72,7 @@ export const tools: Tool<any, any>[] = [
       const result = await compareCountries(indicator, countryList, {
         dateRange: date_range ?? `${now - 5}:${now}`,
       });
-      if (!result.data.length) return `No data for ${indicator} across ${countries}.`;
+      if (!result.data.length) return emptyResponse(`No data for ${indicator} across ${countries}.`);
 
       // Group by country
       const byCountry: Record<string, { year: string; value: number | null }[]> = {};
@@ -78,11 +82,10 @@ export const tools: Tool<any, any>[] = [
         byCountry[key].push({ year: d.date, value: d.value });
       }
 
-      return JSON.stringify({
-        summary: `${result.data[0]?.indicator?.value ?? indicator} comparison across ${Object.keys(byCountry).length} countries`,
-        indicator: result.data[0]?.indicator,
-        countries: byCountry,
-      });
+      return recordResponse(
+        `${result.data[0]?.indicator?.value ?? indicator} comparison across ${Object.keys(byCountry).length} countries`,
+        { indicator: result.data[0]?.indicator, countries: byCountry },
+      );
     },
   },
 
@@ -95,11 +98,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ query }) => {
       const results = await searchIndicators(query, 30);
-      if (!results.length) return `No indicators found for "${query}".`;
-      return JSON.stringify({
-        summary: `${results.length} indicators matching "${query}"`,
-        indicators: results.map(i => ({ id: i.id, name: i.name, source: i.source?.value })),
-      });
+      if (!results.length) return emptyResponse(`No indicators found for "${query}".`);
+      return listResponse(
+        `${results.length} indicators matching "${query}"`,
+        { items: results.map(i => ({ id: i.id, name: i.name, source: i.source?.value })) },
+      );
     },
   },
 
@@ -110,13 +113,15 @@ export const tools: Tool<any, any>[] = [
     parameters: z.object({}),
     execute: async () => {
       const countries = await listCountries();
-      return JSON.stringify({
-        summary: `${countries.length} countries`,
-        countries: countries.map(c => ({
-          code: c.iso2Code, name: c.name, region: c.region?.value,
-          income: c.incomeLevel?.value, capital: c.capitalCity,
-        })),
-      });
+      return tableResponse(
+        `${countries.length} countries`,
+        {
+          rows: countries.map(c => ({
+            code: c.iso2Code, name: c.name, region: c.region?.value,
+            income: c.incomeLevel?.value, capital: c.capitalCity,
+          })),
+        },
+      );
     },
   },
 ];

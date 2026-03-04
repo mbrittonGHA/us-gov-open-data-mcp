@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { Tool } from "fastmcp";
 import { getAirQuality, searchFacilities, getFacilityDetail, getUVIndex, AIR_TABLES, UV_INDEX_SCALE } from "../sdk/epa.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 export const name = "epa";
 export const displayName = "EPA (Environmental Protection Agency)";
@@ -36,11 +37,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, table, rows }) => {
       const data = await getAirQuality({ state, table, rows });
-      if (!Array.isArray(data) || !data.length) return `No air quality data found for ${state}.`;
-      return JSON.stringify({
-        summary: `EPA air quality: ${data.length} records for ${state}`,
-        records: data.slice(0, 100),
-      });
+      if (!Array.isArray(data) || !data.length) return emptyResponse(`No air quality data found for ${state}.`);
+      return tableResponse(
+        `EPA air quality: ${data.length} records for ${state}`,
+        { rows: data },
+      );
     },
   },
 
@@ -66,11 +67,11 @@ export const tools: Tool<any, any>[] = [
         responseset: limit,
       });
       const results = data?.Results?.Facilities || data?.Results || [];
-      if (!Array.isArray(results) || !results.length) return `No facilities found in ${state}.`;
-      return JSON.stringify({
-        summary: `EPA facilities in ${state}: ${results.length} records (${media_type || "air"})`,
-        results: results.slice(0, 50),
-      });
+      if (!Array.isArray(results) || !results.length) return emptyResponse(`No facilities found in ${state}.`);
+      return tableResponse(
+        `EPA facilities in ${state}: ${results.length} records (${media_type || "air"})`,
+        { rows: results },
+      );
     },
   },
 
@@ -86,11 +87,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ zip }) => {
       const data = await getUVIndex(zip);
-      if (!Array.isArray(data) || !data.length) return `No UV forecast data found for ZIP ${zip}.`;
-      return JSON.stringify({
-        summary: `UV index forecast for ZIP ${zip}: ${data.length} forecasts`,
-        forecasts: data.slice(0, 10),
-      });
+      if (!Array.isArray(data) || !data.length) return emptyResponse(`No UV forecast data found for ZIP ${zip}.`);
+      return listResponse(
+        `UV index forecast for ZIP ${zip}: ${data.length} forecasts`,
+        { items: data, maxItems: 10 },
+      );
     },
   },
 ];

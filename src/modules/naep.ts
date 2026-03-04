@@ -21,6 +21,7 @@ import {
   STAT_TYPES,
   JURISDICTIONS,
 } from "../sdk/naep.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -83,15 +84,17 @@ export const tools: Tool<any, any>[] = [
         subscale,
         categoryindex,
       });
-      if (!data.result?.length) return `No NAEP data found for ${subject} grade ${grade}.`;
-      return JSON.stringify({
-        summary: `NAEP ${subject} grade ${grade}: ${data.result.length} data points`,
-        results: data.result.map(r => ({
-          year: r.year, jurisdiction: r.jurisdiction,
-          variable: r.variable, category: r.varValueLabel || r.varValue,
-          value: r.value, standardError: r.se, errorFlag: r.errorFlag,
-        })),
-      });
+      if (!data.result?.length) return emptyResponse(`No NAEP data found for ${subject} grade ${grade}.`);
+      return tableResponse(
+        `NAEP ${subject} grade ${grade}: ${data.result.length} data points`,
+        {
+          rows: data.result.map(r => ({
+            year: r.year, jurisdiction: r.jurisdiction,
+            variable: r.variable, category: r.varValueLabel || r.varValue,
+            value: r.value, standardError: r.se, errorFlag: r.errorFlag,
+          })),
+        },
+      );
     },
   },
 
@@ -116,15 +119,17 @@ export const tools: Tool<any, any>[] = [
         jurisdiction: jurisdiction || "NP",
         year: year || "Current",
       });
-      if (!data.result?.length) return `No achievement level data found for ${subject} grade ${grade}.`;
-      return JSON.stringify({
-        summary: `NAEP achievement levels: ${subject} grade ${grade}, ${data.result.length} data points`,
-        results: data.result.map(r => ({
-          year: r.year, jurisdiction: r.jurisdiction,
-          variable: r.variable, category: r.varValueLabel || r.varValue,
-          statType: r.stattype, value: r.value, standardError: r.se,
-        })),
-      });
+      if (!data.result?.length) return emptyResponse(`No achievement level data found for ${subject} grade ${grade}.`);
+      return tableResponse(
+        `NAEP achievement levels: ${subject} grade ${grade}, ${data.result.length} data points`,
+        {
+          rows: data.result.map(r => ({
+            year: r.year, jurisdiction: r.jurisdiction,
+            variable: r.variable, category: r.varValueLabel || r.varValue,
+            statType: r.stattype, value: r.value, standardError: r.se,
+          })),
+        },
+      );
     },
   },
 
@@ -148,16 +153,18 @@ export const tools: Tool<any, any>[] = [
         variable: variable || "TOTAL",
         jurisdiction: jurisdiction || "NP",
       });
-      if (!data.result?.length) return `No comparison data found.`;
-      return JSON.stringify({
-        summary: `NAEP year comparison: ${subject} grade ${grade}, years ${years}`,
-        results: data.result.map((r: any) => ({
-          year: r.year, jurisdiction: r.jurisdiction,
-          category: r.varValueLabel || r.varValue,
-          focalValue: r.focalValue, targetValue: r.targetValue,
-          gap: r.gap, significance: r.significance ?? r.sig,
-        })),
-      });
+      if (!data.result?.length) return emptyResponse(`No comparison data found.`);
+      return tableResponse(
+        `NAEP year comparison: ${subject} grade ${grade}, years ${years}`,
+        {
+          rows: data.result.map((r: any) => ({
+            year: r.year, jurisdiction: r.jurisdiction,
+            category: r.varValueLabel || r.varValue,
+            focalValue: r.focalValue, targetValue: r.targetValue,
+            gap: r.gap, significance: r.significance ?? r.sig,
+          })),
+        },
+      );
     },
   },
 
@@ -181,16 +188,18 @@ export const tools: Tool<any, any>[] = [
         variable: variable || "TOTAL",
         year: year || "Current",
       });
-      if (!data.result?.length) return `No comparison data found.`;
-      return JSON.stringify({
-        summary: `NAEP state comparison: ${subject} grade ${grade}, jurisdictions ${jurisdictions}`,
-        results: data.result.map((r: any) => ({
-          year: r.year, jurisdiction: r.jurisdiction,
-          category: r.varValueLabel || r.varValue,
-          focalValue: r.focalValue, targetValue: r.targetValue,
-          gap: r.gap, significance: r.significance ?? r.sig,
-        })),
-      });
+      if (!data.result?.length) return emptyResponse(`No comparison data found.`);
+      return tableResponse(
+        `NAEP state comparison: ${subject} grade ${grade}, jurisdictions ${jurisdictions}`,
+        {
+          rows: data.result.map((r: any) => ({
+            year: r.year, jurisdiction: r.jurisdiction,
+            category: r.varValueLabel || r.varValue,
+            focalValue: r.focalValue, targetValue: r.targetValue,
+            gap: r.gap, significance: r.significance ?? r.sig,
+          })),
+        },
+      );
     },
   },
 
@@ -213,17 +222,19 @@ export const tools: Tool<any, any>[] = [
         jurisdiction: jurisdiction || "NP",
         year: year || "Current",
       });
-      if (!data.result?.length) return `No gap data found.`;
-      return JSON.stringify({
-        summary: `NAEP achievement gaps: ${subject} grade ${grade}, by ${variable}`,
-        results: data.result.map((r: any) => ({
-          year: r.year, jurisdiction: r.jurisdiction,
-          focalCategory: r.focalVarValueLabel || r.focalVarValue,
-          targetCategory: r.targetVarValueLabel || r.targetVarValue,
-          focalValue: r.focalValue, targetValue: r.targetValue,
-          gap: r.gap, significance: r.significance ?? r.sig,
-        })),
-      });
+      if (!data.result?.length) return emptyResponse(`No gap data found.`);
+      return tableResponse(
+        `NAEP achievement gaps: ${subject} grade ${grade}, by ${variable}`,
+        {
+          rows: data.result.map((r: any) => ({
+            year: r.year, jurisdiction: r.jurisdiction,
+            focalCategory: r.focalVarValueLabel || r.focalVarValue,
+            targetCategory: r.targetVarValueLabel || r.targetVarValue,
+            focalValue: r.focalValue, targetValue: r.targetValue,
+            gap: r.gap, significance: r.significance ?? r.sig,
+          })),
+        },
+      );
     },
   },
   {
@@ -245,11 +256,11 @@ export const tools: Tool<any, any>[] = [
         subject, grade, years, jurisdictions,
         variable: variable || "TOTAL",
       });
-      if (!data.result?.length) return "No gap data found.";
-      return JSON.stringify({
-        summary: `NAEP year-gap across jurisdictions: ${subject} grade ${grade}, ${years} for ${jurisdictions}`,
-        results: data.result,
-      });
+      if (!data.result?.length) return emptyResponse("No gap data found.");
+      return tableResponse(
+        `NAEP year-gap across jurisdictions: ${subject} grade ${grade}, ${years} for ${jurisdictions}`,
+        { rows: data.result },
+      );
     },
   },
 
@@ -272,11 +283,11 @@ export const tools: Tool<any, any>[] = [
         subject, grade, variable, years,
         jurisdiction: jurisdiction || "NP",
       });
-      if (!data.result?.length) return "No gap data found.";
-      return JSON.stringify({
-        summary: `NAEP group-gap across years: ${subject} grade ${grade}, ${variable} for ${years}`,
-        results: data.result,
-      });
+      if (!data.result?.length) return emptyResponse("No gap data found.");
+      return tableResponse(
+        `NAEP group-gap across years: ${subject} grade ${grade}, ${variable} for ${years}`,
+        { rows: data.result },
+      );
     },
   },
 
@@ -299,11 +310,11 @@ export const tools: Tool<any, any>[] = [
         subject, grade, variable, jurisdictions,
         year: year || "Current",
       });
-      if (!data.result?.length) return "No gap data found.";
-      return JSON.stringify({
-        summary: `NAEP group-gap across jurisdictions: ${subject} grade ${grade}, ${variable} for ${jurisdictions}`,
-        results: data.result,
-      });
+      if (!data.result?.length) return emptyResponse("No gap data found.");
+      return tableResponse(
+        `NAEP group-gap across jurisdictions: ${subject} grade ${grade}, ${variable} for ${jurisdictions}`,
+        { rows: data.result },
+      );
     },
   },
 
@@ -321,11 +332,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ subject, cohort, years }) => {
       const data = await getAvailableVariables({ subject, cohort, years });
-      if (!data.result?.length) return `No variables found for ${subject} cohort ${cohort}.`;
-      return JSON.stringify({
-        summary: `NAEP variables for ${subject} cohort ${cohort}: ${data.result.length} variables`,
-        results: data.result,
-      });
+      if (!data.result?.length) return emptyResponse(`No variables found for ${subject} cohort ${cohort}.`);
+      return listResponse(
+        `NAEP variables for ${subject} cohort ${cohort}: ${data.result.length} variables`,
+        { items: data.result },
+      );
     },
   },
 ];

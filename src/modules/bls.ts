@@ -17,6 +17,7 @@ import {
   industryLabels,
   type BlsSeries,
 } from "../sdk/bls.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -57,7 +58,7 @@ export const reference = {
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 function summarizeSeriesData(s: BlsSeries) {
-  const obs = s.data.slice(0, 60).map(d => ({
+  const obs = s.data.map(d => ({
     period: `${d.year}-${d.period}`,
     periodName: d.periodName,
     year: Number(d.year),
@@ -147,7 +148,7 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ series_ids, start_year, end_year }) => {
       const ids = series_ids.split(",").map((s: string) => s.trim()).filter(Boolean);
-      if (!ids.length) return JSON.stringify({ summary: "No series IDs provided.", series: [] });
+      if (!ids.length) return emptyResponse("No series IDs provided.");
 
       const defaultStart = new Date().getFullYear() - 3;
       const data = await getSeriesData(ids, {
@@ -156,14 +157,28 @@ export const tools: Tool<any, any>[] = [
       });
 
       const series = data.Results?.series ?? [];
-      if (!series.length) return JSON.stringify({ summary: "No data returned from BLS.", series: [] });
+      if (!series.length) return emptyResponse("No data returned from BLS.");
 
       const messages = data.message?.length ? data.message.join("; ") : null;
-      return JSON.stringify({
-        summary: `BLS data: ${series.length} series returned${messages ? ` (${messages})` : ""}`,
-        notes: messages,
-        series: series.map(summarizeSeriesData),
-      });
+      // Each series becomes a separate table with period+value columns
+      const allObs = series.flatMap(s =>
+        s.data.map(d => ({
+          seriesId: s.seriesID,
+          period: `${d.year}-${d.period}`,
+          periodName: d.periodName,
+          year: Number(d.year),
+          value: Number(d.value) || null,
+          pctChange12Mo: d.calculations?.pct_changes?.["12"] ? Number(d.calculations.pct_changes["12"]) : null,
+        }))
+      );
+      return tableResponse(
+        `BLS data: ${series.length} series returned${messages ? ` (${messages})` : ""}`,
+        {
+          rows: allObs,
+          columns: ["seriesId", "period", "periodName", "year", "value", "pctChange12Mo"],
+          meta: messages ? { notes: messages } : undefined,
+        },
+      );
     },
   },
 
@@ -185,27 +200,23 @@ export const tools: Tool<any, any>[] = [
       // State employment uses LAUS codes
       if (topic === "state_employment" && state) {
         const series = getStateEmploymentSeries(state);
-        if (!series) return JSON.stringify({ summary: `Unknown state code: ${state}`, series: [] });
-        return JSON.stringify({
-          summary: `BLS state employment series for ${state.toUpperCase()}: ${series.length} series. Use these IDs with bls_series_data.`,
-          series,
-        });
+        if (!series) return emptyResponse(`Unknown state code: ${state}`);
+        return listResponse(
+          `BLS state employment series for ${state.toUpperCase()}: ${series.length} series. Use these IDs with bls_series_data.`,
+          { items: series },
+        );
       }
 
       const series = searchPopularSeries(topic);
       if (!series.length) {
         const available = getAvailableTopics();
-        return JSON.stringify({
-          summary: `Unknown topic: "${topic}". Available: ${available.join(", ")}`,
-          availableTopics: available,
-          series: [],
-        });
+        return emptyResponse(`Unknown topic: "${topic}". Available: ${available.join(", ")}`);
       }
 
-      return JSON.stringify({
-        summary: `BLS series for "${topic}": ${series.length} series. Use these IDs with bls_series_data.`,
-        series,
-      });
+      return listResponse(
+        `BLS series for "${topic}": ${series.length} series. Use these IDs with bls_series_data.`,
+        { items: series },
+      );
     },
   },
 
@@ -227,13 +238,16 @@ export const tools: Tool<any, any>[] = [
       });
 
       const series = data.Results?.series;
-      if (!series?.length) return JSON.stringify({ summary: "No CPI data returned.", components: [] });
+      if (!series?.length) return emptyResponse("No CPI data returned.");
 
       const components = series.map(s => computeYoy(s, cpiLabels));
-      return JSON.stringify({
-        summary: `CPI inflation breakdown: ${components.length} components with latest values and YoY change`,
-        components,
-      });
+      return tableResponse(
+        `CPI inflation breakdown: ${components.length} components with latest values and YoY change`,
+        {
+          rows: components,
+          columns: ["seriesId", "label", "value", "period", "periodName", "year", "yoyPercent"],
+        },
+      );
     },
   },
 
@@ -255,13 +269,16 @@ export const tools: Tool<any, any>[] = [
       });
 
       const series = data.Results?.series;
-      if (!series?.length) return JSON.stringify({ summary: "No employment data returned.", industries: [] });
+      if (!series?.length) return emptyResponse("No employment data returned.");
 
       const industries = series.map(s => computeEmploymentYoy(s, industryLabels));
-      return JSON.stringify({
-        summary: `Employment by industry: ${industries.length} sectors with latest values (thousands) and YoY change`,
-        industries,
-      });
+      return tableResponse(
+        `Employment by industry: ${industries.length} sectors with latest values (thousands) and YoY change`,
+        {
+          rows: industries,
+          columns: ["seriesId", "label", "valueThousands", "period", "periodName", "year", "yoyChangeThousands"],
+        },
+      );
     },
   },
 ];

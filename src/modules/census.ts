@@ -12,6 +12,7 @@ import {
   commonVariables,
   datasets,
 } from "../sdk/census.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -60,17 +61,16 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ dataset, variables, for_geo, in_geo }) => {
       const data = await queryCensus(dataset, variables, for_geo, in_geo);
-      const rows = data.rows.slice(0, 50);
-      return JSON.stringify({
-        summary: `Census ${dataset}: ${data.rows.length} records for get=${variables} for=${for_geo}${in_geo ? ` in=${in_geo}` : ""}`,
-        dataset,
-        variables: variables.split(","),
-        forGeo: for_geo,
-        inGeo: in_geo || null,
-        totalRecords: data.rows.length,
-        truncated: data.rows.length > 50,
-        rows: rows.map(row => rowToObject(data.headers, row)),
-      });
+      const rows = data.rows.map(row => rowToObject(data.headers, row));
+      return tableResponse(
+        `Census ${dataset}: ${data.rows.length} records for get=${variables} for=${for_geo}${in_geo ? ` in=${in_geo}` : ""}`,
+        {
+          rows,
+          columns: data.headers,
+          total: data.rows.length,
+          meta: { dataset, variables: variables.split(","), forGeo: for_geo, inGeo: in_geo || null },
+        },
+      );
     },
   },
 
@@ -107,13 +107,14 @@ export const tools: Tool<any, any>[] = [
           medianAge: parseFloat(row[ageIdx]),
         }));
 
-      return JSON.stringify({
-        summary: `U.S. Population (${y} ACS 1-Year): ${states.length} states/territories`,
-        year: y,
-        dataset: "ACS 1-Year",
-        totalRecords: states.length,
-        states,
-      });
+      return tableResponse(
+        `U.S. Population (${y} ACS 1-Year): ${states.length} states/territories`,
+        {
+          rows: states,
+          columns: ["name", "population", "medianIncome", "medianAge"],
+          meta: { year: y, dataset: "ACS 1-Year" },
+        },
+      );
     },
   },
 
@@ -131,14 +132,12 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ dataset, keyword, max_results }) => {
       const matches = await searchVariables(dataset, keyword, max_results ?? 20);
       if (!matches.length) {
-        return JSON.stringify({ summary: `No variables matching "${keyword}" in ${dataset}.`, matches: [] });
+        return emptyResponse(`No variables matching "${keyword}" in ${dataset}.`);
       }
-      return JSON.stringify({
-        summary: `Census variables matching "${keyword}" in ${dataset}: ${matches.length} found`,
-        dataset,
-        keyword,
-        matches,
-      });
+      return listResponse(
+        `Census variables matching "${keyword}" in ${dataset}: ${matches.length} found`,
+        { items: matches, meta: { dataset, keyword } },
+      );
     },
   },
 ];

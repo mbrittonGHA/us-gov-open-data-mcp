@@ -16,6 +16,7 @@ import {
   type DojPressRelease,
   type DojBlogEntry,
 } from "../sdk/doj-news.js";
+import { listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -105,10 +106,20 @@ export const tools: Tool<any, any>[] = [
       });
       const total = data.metadata?.resultset?.count ?? "?";
       const results = data.results ?? [];
-      if (!results.length) return "No press releases found.";
+      if (!results.length) return emptyResponse("No press releases found.");
 
-      const summaries = results.map(summarizePressRelease);
-      return `DOJ Press Releases: ${total} total, showing ${results.length} (page ${data.metadata?.resultset?.page ?? 0})\n\n${summaries.join("\n\n---\n\n")}`;
+      return listResponse(
+        `DOJ Press Releases: ${total} total, showing ${results.length} (page ${data.metadata?.resultset?.page ?? 0})`,
+        {
+          total: typeof total === "number" ? total : undefined,
+          items: results.map(pr => ({
+            title: pr.title,
+            date: parseUnixDate(pr.date),
+            components: pr.component?.map(c => c.name),
+            url: pr.url,
+          })),
+        },
+      );
     },
   },
 
@@ -124,24 +135,23 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ uuid }) => {
       const data = await getPressRelease(uuid);
       const results = data.results ?? [];
-      if (!results.length) return `No press release found with UUID: ${uuid}`;
+      if (!results.length) return emptyResponse(`No press release found with UUID: ${uuid}`);
       const pr = results[0];
-      const parts: string[] = [];
-      parts.push(pr.title ?? "Untitled");
-      parts.push(`Date: ${parseUnixDate(pr.date)}`);
-      const components = pr.component?.map(c => c.name).join(", ");
-      if (components) parts.push(`Component: ${components}`);
-      const topics = Array.isArray(pr.topic)
-        ? pr.topic.map(t => t.name).join(", ")
-        : typeof pr.topic === "string" ? pr.topic : undefined;
-      if (topics) parts.push(`Topic: ${topics}`);
-      if (pr.url) parts.push(`URL: ${pr.url}`);
-      if (pr.body) {
-        const cleanBody = String(pr.body).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&")
-          .replace(/&nbsp;/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-        parts.push(`\n--- FULL TEXT ---\n${cleanBody}`);
-      }
-      return parts.join("\n");
+      const cleanBody = pr.body
+        ? String(pr.body).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&")
+            .replace(/&nbsp;/g, " ").replace(/\n{3,}/g, "\n\n").trim()
+        : null;
+      return recordResponse(
+        pr.title ?? "Untitled",
+        {
+          title: pr.title,
+          date: parseUnixDate(pr.date),
+          components: pr.component?.map(c => c.name),
+          topics: Array.isArray(pr.topic) ? pr.topic.map(t => t.name) : typeof pr.topic === "string" ? [pr.topic] : undefined,
+          url: pr.url,
+          body: cleanBody,
+        },
+      );
     },
   },
 
@@ -167,10 +177,22 @@ export const tools: Tool<any, any>[] = [
       });
       const total = data.metadata?.resultset?.count ?? "?";
       const results = data.results ?? [];
-      if (!results.length) return "No blog entries found.";
+      if (!results.length) return emptyResponse("No blog entries found.");
 
-      const summaries = results.map(summarizeBlog);
-      return `DOJ Blog Entries: ${total} total, showing ${results.length} (page ${data.metadata?.resultset?.page ?? 0})\n\n${summaries.join("\n\n---\n\n")}`;
+      return listResponse(
+        `DOJ Blog Entries: ${total} total, showing ${results.length} (page ${data.metadata?.resultset?.page ?? 0})`,
+        {
+          total: typeof total === "number" ? total : undefined,
+          items: results.map(blog => ({
+            title: blog.title,
+            date: parseUnixDate(blog.date),
+            components: blog.component?.map(c => c.name),
+            topic: blog.topic ? String(blog.topic).replace(/<[^>]+>/g, "").trim() : undefined,
+            url: blog.url,
+            teaser: blog.teaser ? String(blog.teaser).replace(/<[^>]+>/g, "").trim().slice(0, 300) : undefined,
+          })),
+        },
+      );
     },
   },
 
@@ -186,24 +208,23 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ uuid }) => {
       const data = await getBlogEntry(uuid);
       const results = data.results ?? [];
-      if (!results.length) return `No blog entry found with UUID: ${uuid}`;
+      if (!results.length) return emptyResponse(`No blog entry found with UUID: ${uuid}`);
       const blog = results[0];
-      const parts: string[] = [];
-      parts.push(blog.title ?? "Untitled");
-      parts.push(`Date: ${parseUnixDate(blog.date)}`);
-      const components = blog.component?.map(c => c.name).join(", ");
-      if (components) parts.push(`Component: ${components}`);
-      if (blog.topic) {
-        const cleanTopic = String(blog.topic).replace(/<[^>]+>/g, "").trim();
-        if (cleanTopic) parts.push(`Topic: ${cleanTopic}`);
-      }
-      if (blog.url) parts.push(`URL: ${blog.url}`);
-      if (blog.body) {
-        const cleanBody = String(blog.body).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&")
-          .replace(/&nbsp;/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-        parts.push(`\n--- FULL TEXT ---\n${cleanBody}`);
-      }
-      return parts.join("\n");
+      const cleanBody = blog.body
+        ? String(blog.body).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&")
+            .replace(/&nbsp;/g, " ").replace(/\n{3,}/g, "\n\n").trim()
+        : null;
+      return recordResponse(
+        blog.title ?? "Untitled",
+        {
+          title: blog.title,
+          date: parseUnixDate(blog.date),
+          components: blog.component?.map(c => c.name),
+          topic: blog.topic ? String(blog.topic).replace(/<[^>]+>/g, "").trim() : undefined,
+          url: blog.url,
+          body: cleanBody,
+        },
+      );
     },
   },
 ];

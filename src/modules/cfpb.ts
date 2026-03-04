@@ -15,6 +15,7 @@ import {
   PRODUCTS,
   AGG_FIELDS,
 } from "../sdk/cfpb.js";
+import { tableResponse, listResponse, recordResponse, emptyResponse } from "../response.js";
 
 export const name = "cfpb";
 export const displayName = "CFPB (Consumer Financial Protection Bureau)";
@@ -74,13 +75,11 @@ export const tools: Tool<any, any>[] = [
       const data = await searchComplaints({ ...args, no_aggs: true });
       const total = typeof data.hits?.total === "object" ? data.hits.total.value : data.hits?.total ?? 0;
       const complaints = data.hits?.hits?.map(h => h._source) ?? [];
-      if (!complaints.length) return "No complaints found matching the search criteria.";
-      return JSON.stringify({
-        summary: `CFPB complaints: ${total.toLocaleString()} total matches, showing ${complaints.length}`,
-        meta: data._meta,
-        total,
-        complaints: complaints.slice(0, 50),
-      });
+      if (!complaints.length) return emptyResponse("No complaints found matching the search criteria.");
+      return listResponse(
+        `CFPB complaints: ${total.toLocaleString()} total matches, showing ${Math.min(complaints.length, 50)}`,
+        { items: complaints, total, meta: data._meta },
+      );
     },
   },
 
@@ -105,12 +104,13 @@ export const tools: Tool<any, any>[] = [
       const total = typeof data.hits?.total === "object" ? data.hits.total.value : data.hits?.total ?? 0;
       // Extract aggregation buckets — the key varies by field
       const aggs = (data as any).aggregations ?? (data as any).aggs ?? {};
-      return JSON.stringify({
-        summary: `CFPB aggregation by '${args.field}': ${total.toLocaleString()} total complaints`,
-        total,
-        aggregations: aggs,
-        meta: data._meta,
-      });
+      const firstKey = Object.keys(aggs)[0];
+      const buckets: Record<string, unknown>[] = firstKey ? (aggs[firstKey]?.buckets ?? []) : [];
+      if (!buckets.length) return emptyResponse(`No aggregation results for '${args.field}'.`);
+      return tableResponse(
+        `CFPB aggregation by '${args.field}': ${total.toLocaleString()} total complaints, ${buckets.length} groups`,
+        { rows: buckets, total, meta: data._meta },
+      );
     },
   },
 
@@ -136,7 +136,15 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getComplaintTrends(args);
-      return JSON.stringify(data);
+      if (!data) return emptyResponse(`No complaint trend data found for lens '${args.lens ?? "overview"}'.`);
+      const items = (data as any)?.dataByTopic ?? (data as any)?.trends ?? (data as any)?.results;
+      if (Array.isArray(items) && items.length) {
+        return listResponse(
+          `CFPB complaint trends (${args.lens ?? "overview"}): ${items.length} series`,
+          { items },
+        );
+      }
+      return recordResponse(`CFPB complaint trends (${args.lens ?? "overview"})`, data as Record<string, unknown>);
     },
   },
 
@@ -151,7 +159,8 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ complaint_id }) => {
       const data = await getComplaintById(complaint_id);
-      return JSON.stringify(data);
+      if (!data) return emptyResponse(`No complaint found with ID ${complaint_id}.`);
+      return recordResponse(`CFPB complaint #${complaint_id}`, data as Record<string, unknown>);
     },
   },
 
@@ -172,7 +181,12 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getStateComplaints(args);
-      return JSON.stringify(data);
+      if (!data) return emptyResponse("No state complaint data found.");
+      const states = (data as any)?.stateData ?? (data as any)?.states ?? (Array.isArray(data) ? data : null);
+      if (Array.isArray(states) && states.length) {
+        return tableResponse(`CFPB complaints by state: ${states.length} states`, { rows: states });
+      }
+      return recordResponse("CFPB complaints by state", data as Record<string, unknown>);
     },
   },
 
@@ -189,11 +203,11 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ text, size }) => {
       const data = await suggestCompany(text, size);
       const suggestions = data.suggest?.[0]?.options?.map(o => o.text) ?? [];
-      if (!suggestions.length) return `No company name suggestions for "${text}".`;
-      return JSON.stringify({
-        summary: `Company suggestions for "${text}": ${suggestions.length} matches`,
-        suggestions,
-      });
+      if (!suggestions.length) return emptyResponse(`No company name suggestions for "${text}".`);
+      return listResponse(
+        `Company suggestions for "${text}": ${suggestions.length} matches`,
+        { items: suggestions.map(s => ({ name: s })) },
+      );
     },
   },
 ];

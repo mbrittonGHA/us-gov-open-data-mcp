@@ -7,6 +7,7 @@
 import { z } from "zod";
 import type { Tool, InputPrompt } from "fastmcp";
 import { keysEnum, describeEnum } from "../enum-utils.js";
+import { tableResponse, listResponse, recordResponse, emptyResponse } from "../response.js";
 import {
   searchBills,
   getBillDetails,
@@ -184,12 +185,12 @@ export const tools: Tool<any, any>[] = [
       const data = await searchBills({ query, congress, bill_type, limit, offset, fromDateTime, toDateTime, sort });
       const bills = data.bills;
       if (!bills.length) {
-        return JSON.stringify({ summary: query ? `No bills found matching "${query}".` : "No bills found.", bills: [] });
+        return emptyResponse(query ? `No bills found matching "${query}".` : "No bills found.");
       }
-      return JSON.stringify({
-        summary: `Bill search${query ? ` "${query}"` : ""}${congress ? ` (${congress}th Congress)` : ""}: ${bills.length} results`,
-        bills: bills.map(summarizeBill),
-      });
+      return listResponse(
+        `Bill search${query ? ` "${query}"` : ""}${congress ? ` (${congress}th Congress)` : ""}: ${bills.length} results`,
+        { items: bills.map(summarizeBill) },
+      );
     },
   },
 
@@ -208,27 +209,29 @@ export const tools: Tool<any, any>[] = [
       const { bill, cosponsors, cosponsorPartyBreakdown } = await getBillDetails(congress, bill_type, bill_number);
       const sponsors = bill.sponsors;
       const sponsor = sponsors?.[0];
-      return JSON.stringify({
-        summary: `${bill.type ?? ""}${bill.number ?? ""}: ${bill.title ?? "No title"} (${congress}th Congress)`,
-        congress,
-        type: bill.type ?? null,
-        number: bill.number ?? null,
-        title: bill.title ?? null,
-        introducedDate: bill.introducedDate ?? null,
-        sponsor: sponsor ? {
-          name: `${sponsor.firstName ?? ""} ${sponsor.lastName ?? ""}`.trim(),
-          party: sponsor.party ?? null,
-          state: sponsor.state ?? null,
-        } : null,
-        cosponsors: {
-          total: cosponsors.length,
-          partyBreakdown: cosponsorPartyBreakdown,
+      return recordResponse(
+        `${bill.type ?? ""}${bill.number ?? ""}: ${bill.title ?? "No title"} (${congress}th Congress)`,
+        {
+          congress,
+          type: bill.type ?? null,
+          number: bill.number ?? null,
+          title: bill.title ?? null,
+          introducedDate: bill.introducedDate ?? null,
+          sponsor: sponsor ? {
+            name: `${sponsor.firstName ?? ""} ${sponsor.lastName ?? ""}`.trim(),
+            party: sponsor.party ?? null,
+            state: sponsor.state ?? null,
+          } : null,
+          cosponsors: {
+            total: cosponsors.length,
+            partyBreakdown: cosponsorPartyBreakdown,
+          },
+          policyArea: bill.policyArea?.name ?? null,
+          latestAction: bill.latestAction ? { text: bill.latestAction.text, date: bill.latestAction.actionDate } : null,
+          laws: bill.laws?.map(l => ({ type: l.type, number: l.number })) ?? [],
+          congressGovUrl: `https://www.congress.gov/bill/${congress}th-congress/${billTypeToUrlSegment(bill_type)}/${bill_number}`,
         },
-        policyArea: bill.policyArea?.name ?? null,
-        latestAction: bill.latestAction ? { text: bill.latestAction.text, date: bill.latestAction.actionDate } : null,
-        laws: bill.laws?.map(l => ({ type: l.type, number: l.number })) ?? [],
-        congressGovUrl: `https://www.congress.gov/bill/${congress}th-congress/${billTypeToUrlSegment(bill_type)}/${bill_number}`,
-      });
+      );
     },
   },
 
@@ -252,12 +255,12 @@ export const tools: Tool<any, any>[] = [
       const data = await searchMembers({ congress, state, district, currentMember, fromDateTime, toDateTime, limit });
       const members = data.members;
       if (!members.length) {
-        return JSON.stringify({ summary: "No members found.", members: [] });
+        return emptyResponse("No members found.");
       }
-      return JSON.stringify({
-        summary: `Members of Congress: ${members.length} results${state ? ` (${state.toUpperCase()})` : ""}`,
-        members: members.map(summarizeMember),
-      });
+      return listResponse(
+        `Members of Congress: ${members.length} results${state ? ` (${state.toUpperCase()})` : ""}`,
+        { items: members.map(summarizeMember) },
+      );
     },
   },
 
@@ -284,42 +287,45 @@ export const tools: Tool<any, any>[] = [
 
       // Specific vote with member breakdown
       if (data.members && data.partyTally) {
-        return JSON.stringify({
-          summary: `House Vote #${vote_number} (${congressNum}th Congress, Session ${session}): ${data.members.length} members voting`,
-          congress: congressNum,
-          session,
-          voteNumber: vote_number,
-          totalVoting: data.members.length,
-          partyBreakdown: data.partyTally,
-        });
+        return recordResponse(
+          `House Vote #${vote_number} (${congressNum}th Congress, Session ${session}): ${data.members.length} members voting`,
+          {
+            congress: congressNum,
+            session,
+            voteNumber: vote_number,
+            totalVoting: data.members.length,
+            partyBreakdown: data.partyTally,
+          },
+        );
       }
 
       // Specific vote without member breakdown (fallback)
       if (data.vote) {
         const v = data.vote;
-        return JSON.stringify({
-          summary: `House Vote #${vote_number} (${congressNum}th Congress): ${v.result ?? "Unknown result"}`,
-          congress: congressNum,
-          session,
-          voteNumber: vote_number,
-          question: v.question ?? null,
-          description: v.description ?? null,
-          result: v.result ?? null,
-          date: v.date ?? null,
-          bill: v.bill ? { type: v.bill.type, number: v.bill.number } : null,
-        });
+        return recordResponse(
+          `House Vote #${vote_number} (${congressNum}th Congress): ${v.result ?? "Unknown result"}`,
+          {
+            congress: congressNum,
+            session,
+            voteNumber: vote_number,
+            question: v.question ?? null,
+            description: v.description ?? null,
+            result: v.result ?? null,
+            date: v.date ?? null,
+            bill: v.bill ? { type: v.bill.type, number: v.bill.number } : null,
+          },
+        );
       }
 
       // List of recent votes
       const votes = data.votes ?? [];
       if (!votes.length) {
-        return JSON.stringify({ summary: "No House votes found.", votes: [] });
+        return emptyResponse("No House votes found.");
       }
-      return JSON.stringify({
-        summary: `House votes (${congressNum}th Congress${session ? `, Session ${session}` : ""}): ${votes.length} results`,
-        congress: congressNum,
-        votes: votes.map(summarizeVote),
-      });
+      return listResponse(
+        `House votes (${congressNum}th Congress${session ? `, Session ${session}` : ""}): ${votes.length} results`,
+        { items: votes.map(summarizeVote), meta: { congress: congressNum } },
+      );
     },
   },
 
@@ -346,43 +352,46 @@ export const tools: Tool<any, any>[] = [
 
       // Specific vote with member breakdown
       if (data.members && data.partyTally && data.vote) {
-        return JSON.stringify({
-          summary: `Senate Vote #${vote_number} (${congressNum}th Congress, Session ${sessionNum}): ${data.vote.result} — ${data.members.length} senators voting`,
-          congress: congressNum,
-          session: sessionNum,
-          voteNumber: vote_number,
-          question: data.vote.question,
-          result: data.vote.result,
-          title: data.vote.title,
-          date: data.vote.date,
-          majorityRequired: data.vote.majorityRequired,
-          count: data.vote.count,
-          document: data.vote.document ?? null,
-          tieBreaker: data.vote.tieBreaker ?? null,
-          totalVoting: data.members.length,
-          partyBreakdown: data.partyTally,
-        });
+        return recordResponse(
+          `Senate Vote #${vote_number} (${congressNum}th Congress, Session ${sessionNum}): ${data.vote.result} — ${data.members.length} senators voting`,
+          {
+            congress: congressNum,
+            session: sessionNum,
+            voteNumber: vote_number,
+            question: data.vote.question,
+            result: data.vote.result,
+            title: data.vote.title,
+            date: data.vote.date,
+            majorityRequired: data.vote.majorityRequired,
+            count: data.vote.count,
+            document: data.vote.document ?? null,
+            tieBreaker: data.vote.tieBreaker ?? null,
+            totalVoting: data.members.length,
+            partyBreakdown: data.partyTally,
+          },
+        );
       }
 
       // List of recent votes
       const votes = data.votes ?? [];
       if (!votes.length) {
-        return JSON.stringify({ summary: "No Senate votes found.", votes: [] });
+        return emptyResponse("No Senate votes found.");
       }
-      return JSON.stringify({
-        summary: `Senate votes (${congressNum}th Congress, Session ${sessionNum}): ${votes.length} results`,
-        congress: congressNum,
-        session: sessionNum,
-        votes: votes.map((v) => ({
-          voteNumber: v.voteNumber,
-          date: v.date,
-          question: v.question,
-          result: v.result,
-          title: v.title,
-          issue: v.description,
-          count: v.count,
-        })),
-      });
+      return listResponse(
+        `Senate votes (${congressNum}th Congress, Session ${sessionNum}): ${votes.length} results`,
+        {
+          items: votes.map((v) => ({
+            voteNumber: v.voteNumber,
+            date: v.date,
+            question: v.question,
+            result: v.result,
+            title: v.title,
+            issue: v.description,
+            count: v.count,
+          })),
+          meta: { congress: congressNum, session: sessionNum },
+        },
+      );
     },
   },
 
@@ -402,13 +411,12 @@ export const tools: Tool<any, any>[] = [
       const data = await getRecentLaws({ congress, lawType: law_type, limit });
       const laws = data.laws;
       if (!laws.length) {
-        return JSON.stringify({ summary: `No laws found for the ${congressNum}th Congress.`, laws: [] });
+        return emptyResponse(`No laws found for the ${congressNum}th Congress.`);
       }
-      return JSON.stringify({
-        summary: `Laws enacted (${congressNum}th Congress): ${laws.length} results`,
-        congress: congressNum,
-        laws: laws.map(summarizeLaw),
-      });
+      return listResponse(
+        `Laws enacted (${congressNum}th Congress): ${laws.length} results`,
+        { items: laws.map(summarizeLaw), meta: { congress: congressNum } },
+      );
     },
   },
 
@@ -428,14 +436,12 @@ export const tools: Tool<any, any>[] = [
       const data = await getMemberBills(bioguide_id, legType, limit ?? 20);
       const bills = data.bills;
       if (!bills.length) {
-        return JSON.stringify({ summary: `No ${legType} legislation found for member ${bioguide_id}.`, bioguideId: bioguide_id, bills: [] });
+        return emptyResponse(`No ${legType} legislation found for member ${bioguide_id}.`);
       }
-      return JSON.stringify({
-        summary: `${legType === "cosponsored" ? "Cosponsored" : "Sponsored"} legislation for ${bioguide_id}: ${bills.length} results`,
-        bioguideId: bioguide_id,
-        type: legType,
-        bills: bills.map(summarizeSponsoredBill),
-      });
+      return listResponse(
+        `${legType === "cosponsored" ? "Cosponsored" : "Sponsored"} legislation for ${bioguide_id}: ${bills.length} results`,
+        { items: bills.map(summarizeSponsoredBill), meta: { bioguideId: bioguide_id, type: legType } },
+      );
     },
   },
 
@@ -457,20 +463,22 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, bill_type, bill_number, limit }) => {
       const data = await getBillActions(congress, bill_type, bill_number, limit ?? 100);
       if (!data.actions.length) {
-        return JSON.stringify({ summary: `No actions found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`, actions: [] });
+        return emptyResponse(`No actions found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`);
       }
-      return JSON.stringify({
-        summary: `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.actions.length} actions`,
-        actions: data.actions.map(a => ({
-          date: a.actionDate ?? null,
-          text: a.text ?? null,
-          type: a.type ?? null,
-          actionCode: a.actionCode ?? null,
-          sourceSystem: a.sourceSystem?.name ?? null,
-          committees: a.committees?.map(c => c.name) ?? null,
-          recordedVotes: a.recordedVotes?.map(rv => ({ rollNumber: rv.rollNumber, chamber: rv.chamber, date: rv.date })) ?? null,
-        })),
-      });
+      return listResponse(
+        `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.actions.length} actions`,
+        {
+          items: data.actions.map(a => ({
+            date: a.actionDate ?? null,
+            text: a.text ?? null,
+            type: a.type ?? null,
+            actionCode: a.actionCode ?? null,
+            sourceSystem: a.sourceSystem?.name ?? null,
+            committees: a.committees?.map(c => c.name) ?? null,
+            recordedVotes: a.recordedVotes?.map(rv => ({ rollNumber: rv.rollNumber, chamber: rv.chamber, date: rv.date })) ?? null,
+          })),
+        },
+      );
     },
   },
 
@@ -489,20 +497,22 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, bill_type, bill_number, limit }) => {
       const data = await getBillAmendments(congress, bill_type, bill_number, limit ?? 50);
       if (!data.amendments.length) {
-        return JSON.stringify({ summary: `No amendments found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`, amendments: [] });
+        return emptyResponse(`No amendments found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`);
       }
-      return JSON.stringify({
-        summary: `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.amendments.length} amendments`,
-        amendments: data.amendments.map(a => ({
-          number: a.number ?? null,
-          type: a.type ?? null,
-          congress: a.congress ?? null,
-          description: a.description ?? null,
-          purpose: a.purpose ?? null,
-          sponsor: a.sponsor ? { name: `${a.sponsor.firstName ?? ""} ${a.sponsor.lastName ?? ""}`.trim(), party: a.sponsor.party, state: a.sponsor.state, bioguideId: a.sponsor.bioguideId } : null,
-          latestAction: a.latestAction ? { text: a.latestAction.text, date: a.latestAction.actionDate } : null,
-        })),
-      });
+      return listResponse(
+        `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.amendments.length} amendments`,
+        {
+          items: data.amendments.map(a => ({
+            number: a.number ?? null,
+            type: a.type ?? null,
+            congress: a.congress ?? null,
+            description: a.description ?? null,
+            purpose: a.purpose ?? null,
+            sponsor: a.sponsor ? { name: `${a.sponsor.firstName ?? ""} ${a.sponsor.lastName ?? ""}`.trim(), party: a.sponsor.party, state: a.sponsor.state, bioguideId: a.sponsor.bioguideId } : null,
+            latestAction: a.latestAction ? { text: a.latestAction.text, date: a.latestAction.actionDate } : null,
+          })),
+        },
+      );
     },
   },
 
@@ -521,18 +531,20 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, bill_type, bill_number }) => {
       const data = await getBillSummaries(congress, bill_type, bill_number);
       if (!data.summaries.length) {
-        return JSON.stringify({ summary: `No CRS summaries available for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`, summaries: [] });
+        return emptyResponse(`No CRS summaries available for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`);
       }
-      return JSON.stringify({
-        summary: `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.summaries.length} CRS summaries`,
-        summaries: data.summaries.map(s => ({
-          versionCode: s.versionCode ?? null,
-          actionDate: s.actionDate ?? null,
-          actionDesc: s.actionDesc ?? null,
-          text: s.text ?? null,
-          updateDate: s.updateDate ?? null,
-        })),
-      });
+      return listResponse(
+        `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.summaries.length} CRS summaries`,
+        {
+          items: data.summaries.map(s => ({
+            versionCode: s.versionCode ?? null,
+            actionDate: s.actionDate ?? null,
+            actionDesc: s.actionDesc ?? null,
+            text: s.text ?? null,
+            updateDate: s.updateDate ?? null,
+          })),
+        },
+      );
     },
   },
 
@@ -550,16 +562,18 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, bill_type, bill_number }) => {
       const data = await getBillTextVersions(congress, bill_type, bill_number);
       if (!data.textVersions.length) {
-        return JSON.stringify({ summary: `No text versions found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`, textVersions: [] });
+        return emptyResponse(`No text versions found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`);
       }
-      return JSON.stringify({
-        summary: `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.textVersions.length} text versions`,
-        textVersions: data.textVersions.map(t => ({
-          type: t.type ?? null,
-          date: t.date ?? null,
-          formats: t.formats?.map(f => ({ type: f.type, url: f.url })) ?? null,
-        })),
-      });
+      return listResponse(
+        `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.textVersions.length} text versions`,
+        {
+          items: data.textVersions.map(t => ({
+            type: t.type ?? null,
+            date: t.date ?? null,
+            formats: t.formats?.map(f => ({ type: f.type, url: f.url })) ?? null,
+          })),
+        },
+      );
     },
   },
 
@@ -578,19 +592,21 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, bill_type, bill_number, limit }) => {
       const data = await getBillRelatedBills(congress, bill_type, bill_number, limit ?? 50);
       if (!data.relatedBills.length) {
-        return JSON.stringify({ summary: `No related bills found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`, relatedBills: [] });
+        return emptyResponse(`No related bills found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`);
       }
-      return JSON.stringify({
-        summary: `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.relatedBills.length} related bills`,
-        relatedBills: data.relatedBills.map(r => ({
-          type: r.type ?? null,
-          number: r.number ?? null,
-          congress: r.congress ?? null,
-          title: r.title ?? null,
-          relationship: r.relationshipDetails?.map(rd => rd.type) ?? null,
-          latestAction: r.latestAction ? { text: r.latestAction.text, date: r.latestAction.actionDate } : null,
-        })),
-      });
+      return listResponse(
+        `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.relatedBills.length} related bills`,
+        {
+          items: data.relatedBills.map(r => ({
+            type: r.type ?? null,
+            number: r.number ?? null,
+            congress: r.congress ?? null,
+            title: r.title ?? null,
+            relationship: r.relationshipDetails?.map(rd => rd.type) ?? null,
+            latestAction: r.latestAction ? { text: r.latestAction.text, date: r.latestAction.actionDate } : null,
+          })),
+        },
+      );
     },
   },
 
@@ -608,11 +624,13 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ congress, bill_type, bill_number, limit }) => {
       const data = await getBillSubjects(congress, bill_type, bill_number, limit ?? 100);
-      return JSON.stringify({
-        summary: `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.subjects.length} subjects${data.policyArea ? `, policy area: ${data.policyArea}` : ""}`,
-        policyArea: data.policyArea ?? null,
-        subjects: data.subjects.map(s => s.name),
-      });
+      return recordResponse(
+        `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.subjects.length} subjects${data.policyArea ? `, policy area: ${data.policyArea}` : ""}`,
+        {
+          policyArea: data.policyArea ?? null,
+          subjects: data.subjects.map(s => s.name),
+        },
+      );
     },
   },
 
@@ -630,18 +648,20 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, bill_type, bill_number }) => {
       const data = await getBillCommittees(congress, bill_type, bill_number);
       if (!data.committees.length) {
-        return JSON.stringify({ summary: `No committee data for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`, committees: [] });
+        return emptyResponse(`No committee data for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`);
       }
-      return JSON.stringify({
-        summary: `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): referred to ${data.committees.length} committees`,
-        committees: data.committees.map(c => ({
-          name: c.name ?? null,
-          systemCode: c.systemCode ?? null,
-          chamber: c.chamber ?? null,
-          type: c.type ?? null,
-          activities: c.activities?.map(a => ({ name: a.name, date: a.date })) ?? null,
-        })),
-      });
+      return listResponse(
+        `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): referred to ${data.committees.length} committees`,
+        {
+          items: data.committees.map(c => ({
+            name: c.name ?? null,
+            systemCode: c.systemCode ?? null,
+            chamber: c.chamber ?? null,
+            type: c.type ?? null,
+            activities: c.activities?.map(a => ({ name: a.name, date: a.date })) ?? null,
+          })),
+        },
+      );
     },
   },
 
@@ -660,19 +680,21 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, bill_type, bill_number, limit }) => {
       const data = await getBillTitles(congress, bill_type, bill_number, limit ?? 100);
       if (!data.titles.length) {
-        return JSON.stringify({ summary: `No titles found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`, titles: [] });
+        return emptyResponse(`No titles found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`);
       }
-      return JSON.stringify({
-        summary: `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.titles.length} titles`,
-        titles: data.titles.map(t => ({
-          title: t.title ?? null,
-          titleType: t.titleType ?? null,
-          titleTypeCode: t.titleTypeCode ?? null,
-          billTextVersionCode: t.billTextVersionCode ?? null,
-          billTextVersionName: t.billTextVersionName ?? null,
-          updateDate: t.updateDate ?? null,
-        })),
-      });
+      return listResponse(
+        `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${data.titles.length} titles`,
+        {
+          items: data.titles.map(t => ({
+            title: t.title ?? null,
+            titleType: t.titleType ?? null,
+            titleTypeCode: t.titleTypeCode ?? null,
+            billTextVersionCode: t.billTextVersionCode ?? null,
+            billTextVersionName: t.billTextVersionName ?? null,
+            updateDate: t.updateDate ?? null,
+          })),
+        },
+      );
     },
   },
 
@@ -693,28 +715,29 @@ export const tools: Tool<any, any>[] = [
       const data = await getBillCosponsors(congress, bill_type, bill_number, { limit, sort });
       const cosponsors = data.cosponsors;
       if (!cosponsors.length) {
-        return JSON.stringify({ summary: `No cosponsors found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`, cosponsors: [] });
+        return emptyResponse(`No cosponsors found for ${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress).`);
       }
       const partyBreakdown: Record<string, number> = {};
       for (const c of cosponsors) {
         const party = (c.party ?? "?") as string;
         partyBreakdown[party] = (partyBreakdown[party] ?? 0) + 1;
       }
-      return JSON.stringify({
-        summary: `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${cosponsors.length} cosponsors`,
-        totalCosponsors: cosponsors.length,
-        partyBreakdown,
-        cosponsors: cosponsors.map((c: any) => ({
-          firstName: c.firstName ?? null,
-          lastName: c.lastName ?? null,
-          party: c.party ?? null,
-          state: c.state ?? null,
-          district: c.district ?? null,
-          bioguideId: c.bioguideId ?? c.bioguidId ?? null,
-          isOriginalCosponsor: c.isOriginalCosponsor ?? null,
-          sponsorshipDate: c.sponsorshipDate ?? null,
-        })),
-      });
+      return listResponse(
+        `${bill_type.toUpperCase()} ${bill_number} (${congress}th Congress): ${cosponsors.length} cosponsors`,
+        {
+          items: cosponsors.map((c: any) => ({
+            firstName: c.firstName ?? null,
+            lastName: c.lastName ?? null,
+            party: c.party ?? null,
+            state: c.state ?? null,
+            district: c.district ?? null,
+            bioguideId: c.bioguideId ?? c.bioguidId ?? null,
+            isOriginalCosponsor: c.isOriginalCosponsor ?? null,
+            sponsorshipDate: c.sponsorshipDate ?? null,
+          })),
+          meta: { totalCosponsors: cosponsors.length, partyBreakdown },
+        },
+      );
     },
   },
 
@@ -733,20 +756,22 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ bioguide_id }) => {
       const data = await getMemberDetails(bioguide_id);
       const m = data.member;
-      return JSON.stringify({
-        summary: `${m.directOrderName ?? m.invertedOrderName ?? `${m.firstName} ${m.lastName}`} (${m.party ?? "Unknown"}-${m.state ?? "?"})`,
-        bioguideId: m.bioguideId ?? bioguide_id,
-        name: m.directOrderName ?? `${m.firstName ?? ""} ${m.lastName ?? ""}`.trim(),
-        party: m.party ?? null,
-        state: m.state ?? null,
-        birthYear: m.birthYear ?? null,
-        deathYear: m.deathYear ?? null,
-        currentMember: m.currentMember ?? null,
-        officialWebsiteUrl: m.officialWebsiteUrl ?? null,
-        depiction: m.depiction ?? null,
-        partyHistory: m.partyHistory ?? null,
-        terms: m.terms ?? null,
-      });
+      return recordResponse(
+        `${m.directOrderName ?? m.invertedOrderName ?? `${m.firstName} ${m.lastName}`} (${m.party ?? "Unknown"}-${m.state ?? "?"})`,
+        {
+          bioguideId: m.bioguideId ?? bioguide_id,
+          name: m.directOrderName ?? `${m.firstName ?? ""} ${m.lastName ?? ""}`.trim(),
+          party: m.party ?? null,
+          state: m.state ?? null,
+          birthYear: m.birthYear ?? null,
+          deathYear: m.deathYear ?? null,
+          currentMember: m.currentMember ?? null,
+          officialWebsiteUrl: m.officialWebsiteUrl ?? null,
+          depiction: m.depiction ?? null,
+          partyHistory: m.partyHistory ?? null,
+          terms: m.terms ?? null,
+        },
+      );
     },
   },
 
@@ -768,19 +793,21 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, chamber, limit, fromDateTime, toDateTime }) => {
       const data = await listCommittees({ congress, chamber, limit, fromDateTime, toDateTime });
       if (!data.committees.length) {
-        return JSON.stringify({ summary: "No committees found matching criteria.", committees: [] });
+        return emptyResponse("No committees found matching criteria.");
       }
-      return JSON.stringify({
-        summary: `${data.committees.length} committees${congress ? ` (${congress}th Congress)` : ""}${chamber ? ` — ${chamber}` : ""}`,
-        committees: data.committees.map(c => ({
-          name: c.name ?? null,
-          systemCode: c.systemCode ?? null,
-          chamber: c.chamber ?? null,
-          type: c.type ?? null,
-          isCurrent: c.isCurrent ?? null,
-          subcommittees: c.subcommittees?.map(sc => sc.name) ?? null,
-        })),
-      });
+      return listResponse(
+        `${data.committees.length} committees${congress ? ` (${congress}th Congress)` : ""}${chamber ? ` — ${chamber}` : ""}`,
+        {
+          items: data.committees.map(c => ({
+            name: c.name ?? null,
+            systemCode: c.systemCode ?? null,
+            chamber: c.chamber ?? null,
+            type: c.type ?? null,
+            isCurrent: c.isCurrent ?? null,
+            subcommittees: c.subcommittees?.map(sc => sc.name) ?? null,
+          })),
+        },
+      );
     },
   },
 
@@ -798,13 +825,12 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ chamber, committee_code, limit }) => {
       const data = await getCommitteeBills(chamber, committee_code, limit ?? 20);
       if (!data.bills.length) {
-        return JSON.stringify({ summary: `No bills found for committee ${committee_code}.`, bills: [] });
+        return emptyResponse(`No bills found for committee ${committee_code}.`);
       }
-      return JSON.stringify({
-        summary: `${data.bills.length} bills referred to committee ${committee_code}`,
-        committee: committee_code,
-        bills: data.bills.map(summarizeBill),
-      });
+      return listResponse(
+        `${data.bills.length} bills referred to committee ${committee_code}`,
+        { items: data.bills.map(summarizeBill), meta: { committee: committee_code } },
+      );
     },
   },
 
@@ -821,21 +847,23 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ chamber, committee_code }) => {
       const data = await getCommitteeDetails(chamber, committee_code);
       const c = data.committee;
-      return JSON.stringify({
-        summary: `${c.name ?? committee_code} (${c.chamber ?? chamber})`,
-        systemCode: c.systemCode ?? committee_code,
-        name: c.name ?? null,
-        chamber: c.chamber ?? null,
-        type: c.type ?? null,
-        isCurrent: c.isCurrent ?? null,
-        committeeWebsiteUrl: c.committeeWebsiteUrl ?? null,
-        parent: c.parent ?? null,
-        subcommittees: c.subcommittees?.map(sc => ({ name: sc.name, systemCode: sc.systemCode })) ?? null,
-        history: c.history ?? null,
-        bills: c.bills ?? null,
-        reports: c.reports ?? null,
-        updateDate: c.updateDate ?? null,
-      });
+      return recordResponse(
+        `${c.name ?? committee_code} (${c.chamber ?? chamber})`,
+        {
+          systemCode: c.systemCode ?? committee_code,
+          name: c.name ?? null,
+          chamber: c.chamber ?? null,
+          type: c.type ?? null,
+          isCurrent: c.isCurrent ?? null,
+          committeeWebsiteUrl: c.committeeWebsiteUrl ?? null,
+          parent: c.parent ?? null,
+          subcommittees: c.subcommittees?.map(sc => ({ name: sc.name, systemCode: sc.systemCode })) ?? null,
+          history: c.history ?? null,
+          bills: c.bills ?? null,
+          reports: c.reports ?? null,
+          updateDate: c.updateDate ?? null,
+        },
+      );
     },
   },
 
@@ -857,19 +885,21 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, amendment_type, limit, fromDateTime, toDateTime }) => {
       const data = await searchAmendments({ congress, amendmentType: amendment_type, limit, fromDateTime, toDateTime });
       if (!data.amendments.length) {
-        return JSON.stringify({ summary: "No amendments found.", amendments: [] });
+        return emptyResponse("No amendments found.");
       }
-      return JSON.stringify({
-        summary: `${data.amendments.length} amendments${congress ? ` (${congress}th Congress)` : ""}`,
-        amendments: data.amendments.map(a => ({
-          number: a.number ?? null,
-          type: a.type ?? null,
-          congress: a.congress ?? null,
-          description: a.description ?? null,
-          purpose: a.purpose ?? null,
-          latestAction: a.latestAction ? { text: a.latestAction.text, date: a.latestAction.actionDate } : null,
-        })),
-      });
+      return listResponse(
+        `${data.amendments.length} amendments${congress ? ` (${congress}th Congress)` : ""}`,
+        {
+          items: data.amendments.map(a => ({
+            number: a.number ?? null,
+            type: a.type ?? null,
+            congress: a.congress ?? null,
+            description: a.description ?? null,
+            purpose: a.purpose ?? null,
+            latestAction: a.latestAction ? { text: a.latestAction.text, date: a.latestAction.actionDate } : null,
+          })),
+        },
+      );
     },
   },
 
@@ -887,23 +917,25 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, amendment_type, amendment_number }) => {
       const data = await getAmendmentDetails(congress, amendment_type, amendment_number);
       const a = data.amendment;
-      return JSON.stringify({
-        summary: `${amendment_type.toUpperCase()} ${amendment_number} (${congress}th Congress)`,
-        amendment: {
-          number: a.number ?? null,
-          type: a.type ?? null,
-          congress: a.congress ?? null,
-          description: a.description ?? null,
-          purpose: a.purpose ?? null,
-          sponsor: a.sponsor ? { name: `${a.sponsor.firstName ?? ""} ${a.sponsor.lastName ?? ""}`.trim(), party: a.sponsor.party, state: a.sponsor.state, bioguideId: a.sponsor.bioguideId } : null,
-          latestAction: a.latestAction ? { text: a.latestAction.text, date: a.latestAction.actionDate } : null,
+      return recordResponse(
+        `${amendment_type.toUpperCase()} ${amendment_number} (${congress}th Congress)`,
+        {
+          amendment: {
+            number: a.number ?? null,
+            type: a.type ?? null,
+            congress: a.congress ?? null,
+            description: a.description ?? null,
+            purpose: a.purpose ?? null,
+            sponsor: a.sponsor ? { name: `${a.sponsor.firstName ?? ""} ${a.sponsor.lastName ?? ""}`.trim(), party: a.sponsor.party, state: a.sponsor.state, bioguideId: a.sponsor.bioguideId } : null,
+            latestAction: a.latestAction ? { text: a.latestAction.text, date: a.latestAction.actionDate } : null,
+          },
+          actions: data.actions.map(act => ({
+            date: act.actionDate ?? null,
+            text: act.text ?? null,
+            type: act.type ?? null,
+          })),
         },
-        actions: data.actions.map(act => ({
-          date: act.actionDate ?? null,
-          text: act.text ?? null,
-          type: act.type ?? null,
-        })),
-      });
+      );
     },
   },
 
@@ -925,20 +957,22 @@ export const tools: Tool<any, any>[] = [
       const congressNum = congress ?? currentCongress();
       const data = await listNominations({ congress, limit, fromDateTime, toDateTime });
       if (!data.nominations.length) {
-        return JSON.stringify({ summary: `No nominations found for ${congressNum}th Congress.`, nominations: [] });
+        return emptyResponse(`No nominations found for ${congressNum}th Congress.`);
       }
-      return JSON.stringify({
-        summary: `${data.nominations.length} nominations (${congressNum}th Congress)`,
-        nominations: data.nominations.map(n => ({
-          number: n.number ?? null,
-          congress: n.congress ?? null,
-          description: n.description ?? null,
-          organization: n.organization ?? null,
-          receivedDate: n.receivedDate ?? null,
-          nominees: n.nominees ?? null,
-          latestAction: n.latestAction ? { text: n.latestAction.text, date: n.latestAction.actionDate } : null,
-        })),
-      });
+      return listResponse(
+        `${data.nominations.length} nominations (${congressNum}th Congress)`,
+        {
+          items: data.nominations.map(n => ({
+            number: n.number ?? null,
+            congress: n.congress ?? null,
+            description: n.description ?? null,
+            organization: n.organization ?? null,
+            receivedDate: n.receivedDate ?? null,
+            nominees: n.nominees ?? null,
+            latestAction: n.latestAction ? { text: n.latestAction.text, date: n.latestAction.actionDate } : null,
+          })),
+        },
+      );
     },
   },
 
@@ -954,23 +988,25 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, nomination_number }) => {
       const data = await getNominationDetails(congress, nomination_number);
       const n = data.nomination;
-      return JSON.stringify({
-        summary: `Nomination PN${nomination_number} (${congress}th Congress)`,
-        nomination: {
-          number: n.number ?? null,
-          congress: n.congress ?? null,
-          description: n.description ?? null,
-          organization: n.organization ?? null,
-          receivedDate: n.receivedDate ?? null,
-          nominees: n.nominees ?? null,
-          latestAction: n.latestAction ? { text: n.latestAction.text, date: n.latestAction.actionDate } : null,
+      return recordResponse(
+        `Nomination PN${nomination_number} (${congress}th Congress)`,
+        {
+          nomination: {
+            number: n.number ?? null,
+            congress: n.congress ?? null,
+            description: n.description ?? null,
+            organization: n.organization ?? null,
+            receivedDate: n.receivedDate ?? null,
+            nominees: n.nominees ?? null,
+            latestAction: n.latestAction ? { text: n.latestAction.text, date: n.latestAction.actionDate } : null,
+          },
+          actions: data.actions.map(a => ({
+            date: a.actionDate ?? null,
+            text: a.text ?? null,
+            type: a.type ?? null,
+          })),
         },
-        actions: data.actions.map(a => ({
-          date: a.actionDate ?? null,
-          text: a.text ?? null,
-          type: a.type ?? null,
-        })),
-      });
+      );
     },
   },
 
@@ -991,20 +1027,22 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, limit, fromDateTime, toDateTime }) => {
       const data = await listTreaties({ congress, limit, fromDateTime, toDateTime });
       if (!data.treaties.length) {
-        return JSON.stringify({ summary: "No treaties found.", treaties: [] });
+        return emptyResponse("No treaties found.");
       }
-      return JSON.stringify({
-        summary: `${data.treaties.length} treaties${congress ? ` (${congress}th Congress)` : ""}`,
-        treaties: data.treaties.map(t => ({
-          number: t.number ?? null,
-          suffix: t.suffix ?? null,
-          congress: t.congress ?? null,
-          topic: t.topic ?? null,
-          transmittedDate: t.transmittedDate ?? null,
-          inForceDate: t.inForceDate ?? null,
-          latestAction: t.latestAction ? { text: t.latestAction.text, date: t.latestAction.actionDate } : null,
-        })),
-      });
+      return listResponse(
+        `${data.treaties.length} treaties${congress ? ` (${congress}th Congress)` : ""}`,
+        {
+          items: data.treaties.map(t => ({
+            number: t.number ?? null,
+            suffix: t.suffix ?? null,
+            congress: t.congress ?? null,
+            topic: t.topic ?? null,
+            transmittedDate: t.transmittedDate ?? null,
+            inForceDate: t.inForceDate ?? null,
+            latestAction: t.latestAction ? { text: t.latestAction.text, date: t.latestAction.actionDate } : null,
+          })),
+        },
+      );
     },
   },
 
@@ -1020,25 +1058,27 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, treaty_number }) => {
       const data = await getTreatyDetails(congress, treaty_number);
       const t = data.treaty;
-      return JSON.stringify({
-        summary: `Treaty Doc. ${treaty_number} (${congress}th Congress): ${t.topic ?? "No topic"}`,
-        treaty: {
-          number: t.number ?? null,
-          suffix: t.suffix ?? null,
-          congress: t.congress ?? null,
-          congressReceived: t.congressReceived ?? null,
-          topic: t.topic ?? null,
-          transmittedDate: t.transmittedDate ?? null,
-          inForceDate: t.inForceDate ?? null,
-          resolutionText: t.resolutionText ?? null,
-          latestAction: t.latestAction ? { text: t.latestAction.text, date: t.latestAction.actionDate } : null,
+      return recordResponse(
+        `Treaty Doc. ${treaty_number} (${congress}th Congress): ${t.topic ?? "No topic"}`,
+        {
+          treaty: {
+            number: t.number ?? null,
+            suffix: t.suffix ?? null,
+            congress: t.congress ?? null,
+            congressReceived: t.congressReceived ?? null,
+            topic: t.topic ?? null,
+            transmittedDate: t.transmittedDate ?? null,
+            inForceDate: t.inForceDate ?? null,
+            resolutionText: t.resolutionText ?? null,
+            latestAction: t.latestAction ? { text: t.latestAction.text, date: t.latestAction.actionDate } : null,
+          },
+          actions: data.actions.map(a => ({
+            date: a.actionDate ?? null,
+            text: a.text ?? null,
+            type: a.type ?? null,
+          })),
         },
-        actions: data.actions.map(a => ({
-          date: a.actionDate ?? null,
-          text: a.text ?? null,
-          type: a.type ?? null,
-        })),
-      });
+      );
     },
   },
 
@@ -1058,17 +1098,19 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ limit, fromDateTime, toDateTime }) => {
       const data = await searchCrsReports({ limit, fromDateTime, toDateTime });
       if (!data.reports.length) {
-        return JSON.stringify({ summary: "No CRS reports found.", reports: [] });
+        return emptyResponse("No CRS reports found.");
       }
-      return JSON.stringify({
-        summary: `${data.reports.length} CRS reports`,
-        reports: data.reports.map(r => ({
-          reportNumber: r.reportNumber ?? null,
-          title: r.title ?? null,
-          type: r.type ?? null,
-          activeRecord: r.activeRecord ?? null,
-        })),
-      });
+      return listResponse(
+        `${data.reports.length} CRS reports`,
+        {
+          items: data.reports.map(r => ({
+            reportNumber: r.reportNumber ?? null,
+            title: r.title ?? null,
+            type: r.type ?? null,
+            activeRecord: r.activeRecord ?? null,
+          })),
+        },
+      );
     },
   },
 
@@ -1084,21 +1126,23 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ report_number }) => {
       const data = await getCrsReportDetails(report_number);
       const r = data.report;
-      return JSON.stringify({
-        header: `CRS Report ${report_number}: ${r.title ?? "No title"}`,
-        reportNumber: r.id ?? r.reportNumber ?? report_number,
-        title: r.title ?? null,
-        status: r.status ?? null,
-        contentType: r.contentType ?? r.type ?? null,
-        publishDate: r.publishDate ?? null,
-        updateDate: r.updateDate ?? null,
-        summary: r.summary ?? null,
-        authors: r.authors ?? null,
-        topics: r.topics ?? null,
-        formats: r.formats ?? null,
-        relatedMaterials: r.relatedMaterials ?? null,
-        url: r.url ?? null,
-      });
+      return recordResponse(
+        `CRS Report ${report_number}: ${r.title ?? "No title"}`,
+        {
+          reportNumber: r.id ?? r.reportNumber ?? report_number,
+          title: r.title ?? null,
+          status: r.status ?? null,
+          contentType: r.contentType ?? r.type ?? null,
+          publishDate: r.publishDate ?? null,
+          updateDate: r.updateDate ?? null,
+          summary: r.summary ?? null,
+          authors: r.authors ?? null,
+          topics: r.topics ?? null,
+          formats: r.formats ?? null,
+          relatedMaterials: r.relatedMaterials ?? null,
+          url: r.url ?? null,
+        },
+      );
     },
   },
 
@@ -1122,25 +1166,27 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, bill_type, limit, fromDateTime, toDateTime, sort }) => {
       const data = await searchSummaries({ congress, billType: bill_type, limit, fromDateTime, toDateTime, sort });
       if (!data.summaries.length) {
-        return JSON.stringify({ summary: "No summaries found.", summaries: [] });
+        return emptyResponse("No summaries found.");
       }
-      return JSON.stringify({
-        summary: `${data.summaries.length} bill summaries${congress ? ` (${congress}th Congress)` : ""}`,
-        summaries: data.summaries.map(s => ({
-          actionDate: s.actionDate ?? null,
-          actionDesc: s.actionDesc ?? null,
-          text: s.text ?? null,
-          updateDate: s.updateDate ?? null,
-          bill: s.bill ? {
-            congress: s.bill.congress ?? null,
-            type: s.bill.type ?? null,
-            number: s.bill.number ?? null,
-            title: s.bill.title ?? null,
-            url: s.bill.url ?? null,
-          } : null,
-          currentChamber: s.currentChamber ?? null,
-        })),
-      });
+      return listResponse(
+        `${data.summaries.length} bill summaries${congress ? ` (${congress}th Congress)` : ""}`,
+        {
+          items: data.summaries.map(s => ({
+            actionDate: s.actionDate ?? null,
+            actionDesc: s.actionDesc ?? null,
+            text: s.text ?? null,
+            updateDate: s.updateDate ?? null,
+            bill: s.bill ? {
+              congress: s.bill.congress ?? null,
+              type: s.bill.type ?? null,
+              number: s.bill.number ?? null,
+              title: s.bill.title ?? null,
+              url: s.bill.url ?? null,
+            } : null,
+            currentChamber: s.currentChamber ?? null,
+          })),
+        },
+      );
     },
   },
 
@@ -1160,21 +1206,23 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ congress, current, limit }) => {
       const data = await getCongressInfo({ congress, current, limit });
       if (!data.congresses.length) {
-        return JSON.stringify({ summary: "No congress data found.", congresses: [] });
+        return emptyResponse("No congress data found.");
       }
-      return JSON.stringify({
-        summary: data.congresses.length === 1
+      return listResponse(
+        data.congresses.length === 1
           ? `${data.congresses[0].name ?? `Congress #${congress}`}`
           : `${data.congresses.length} congresses`,
-        congresses: data.congresses.map(c => ({
-          name: c.name ?? null,
-          number: c.number ?? null,
-          startYear: c.startYear ?? null,
-          endYear: c.endYear ?? null,
-          sessions: c.sessions ?? null,
-          url: c.url ?? null,
-        })),
-      });
+        {
+          items: data.congresses.map(c => ({
+            name: c.name ?? null,
+            number: c.number ?? null,
+            startYear: c.startYear ?? null,
+            endYear: c.endYear ?? null,
+            sessions: c.sessions ?? null,
+            url: c.url ?? null,
+          })),
+        },
+      );
     },
   },
 
@@ -1195,19 +1243,21 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ year, month, day, limit }) => {
       const data = await getCongressionalRecord({ year, month, day, limit });
       if (!data.issues.length) {
-        return JSON.stringify({ summary: "No Congressional Record issues found.", issues: [] });
+        return emptyResponse("No Congressional Record issues found.");
       }
-      return JSON.stringify({
-        summary: `${data.issues.length} Congressional Record issues`,
-        issues: data.issues.map(i => ({
-          issueNumber: i.issueNumber ?? null,
-          volumeNumber: i.volumeNumber ?? null,
-          issueDate: i.issueDate ?? null,
-          congress: i.congress ?? null,
-          sessionNumber: i.sessionNumber ?? null,
-          url: i.url ?? null,
-        })),
-      });
+      return listResponse(
+        `${data.issues.length} Congressional Record issues`,
+        {
+          items: data.issues.map(i => ({
+            issueNumber: i.issueNumber ?? null,
+            volumeNumber: i.volumeNumber ?? null,
+            issueDate: i.issueDate ?? null,
+            congress: i.congress ?? null,
+            sessionNumber: i.sessionNumber ?? null,
+            url: i.url ?? null,
+          })),
+        },
+      );
     },
   },
 ];

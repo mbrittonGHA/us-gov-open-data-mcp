@@ -17,6 +17,7 @@ import {
   clearCache as sdkClearCache,
   type EarthquakeFeature,
 } from "../sdk/usgs.js";
+import { tableResponse, listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -40,24 +41,22 @@ export const reference = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-function summarizeEarthquakes(features: EarthquakeFeature[]): string {
-  if (!features.length) return "No earthquakes found matching the criteria.";
-  const lines = features.map((f) => {
-    const p = f.properties;
-    const [lon, lat, depth] = f.geometry.coordinates;
-    const time = p.time ? new Date(p.time).toISOString() : "?";
-    const parts = [
-      `M${p.mag ?? "?"} — ${p.place ?? "Unknown location"}`,
-      `  Time: ${time}`,
-      `  Depth: ${depth?.toFixed(1) ?? "?"}km | Lat: ${lat?.toFixed(3)}, Lon: ${lon?.toFixed(3)}`,
-    ];
-    if (p.alert) parts.push(`  Alert: ${p.alert.toUpperCase()} — ${ALERT_LEVELS[p.alert] ?? ""}`);
-    if (p.tsunami === 1) parts.push("  ⚠ TSUNAMI WARNING");
-    if (p.felt) parts.push(`  Felt by: ${p.felt} people`);
-    if (p.url) parts.push(`  Details: ${p.url}`);
-    return parts.join("\n");
-  });
-  return `${features.length} earthquake(s) found:\n\n${lines.join("\n\n")}`;
+function earthquakeToRecord(f: EarthquakeFeature): Record<string, unknown> {
+  const p = f.properties;
+  const [lon, lat, depth] = f.geometry.coordinates;
+  const record: Record<string, unknown> = {
+    magnitude: p.mag ?? null,
+    place: p.place ?? null,
+    time: p.time ? new Date(p.time).toISOString() : null,
+    depth: depth ?? null,
+    latitude: lat ?? null,
+    longitude: lon ?? null,
+  };
+  if (p.alert) record.alert = p.alert;
+  if (p.tsunami === 1) record.tsunami = true;
+  if (p.felt) record.felt = p.felt;
+  if (p.url) record.url = p.url;
+  return record;
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────
@@ -84,8 +83,12 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await searchEarthquakes(args);
-      const header = `${data.metadata?.count ?? data.features.length} total matches`;
-      return { content: [{ type: "text" as const, text: `${header}\n\n${summarizeEarthquakes(data.features)}` }] };
+      if (!data.features.length) return emptyResponse("No earthquakes found matching the criteria.");
+      const items = data.features.map(earthquakeToRecord);
+      return listResponse(
+        `${data.metadata?.count ?? data.features.length} earthquake(s) found`,
+        { items, total: data.metadata?.count ?? data.features.length },
+      );
     },
   },
 
@@ -98,7 +101,12 @@ export const tools: Tool<any, any>[] = [
     parameters: z.object({}),
     execute: async () => {
       const data = await getSignificantEarthquakes();
-      return { content: [{ type: "text" as const, text: summarizeEarthquakes(data.features) }] };
+      if (!data.features.length) return emptyResponse("No significant earthquakes in the past 30 days.");
+      const items = data.features.map(earthquakeToRecord);
+      return listResponse(
+        `${data.features.length} significant earthquake(s) (past 30 days)`,
+        { items, total: data.features.length },
+      );
     },
   },
 
@@ -119,7 +127,7 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await countEarthquakes(args);
-      return { content: [{ type: "text" as const, text: `Earthquake count: ${data.count}` }] };
+      return recordResponse(`Earthquake count: ${data.count}`, { count: data.count });
     },
   },
 
@@ -148,18 +156,22 @@ export const tools: Tool<any, any>[] = [
         endDT: args.end_dt,
       });
       const series = data?.value?.timeSeries ?? [];
-      if (!series.length) return { content: [{ type: "text" as const, text: "No water data found for the specified criteria." }] };
+      if (!series.length) return emptyResponse("No water data found for the specified criteria.");
 
-      const summaries = series.slice(0, 20).map((ts) => {
-        const siteName = ts.sourceInfo?.siteName ?? "Unknown";
-        const siteCode = ts.sourceInfo?.siteCode?.[0]?.value ?? "?";
-        const varName = ts.variable?.variableName ?? "?";
-        const unit = ts.variable?.unit?.unitCode ?? "";
+      const items = series.map((ts: any) => {
         const values = ts.values?.[0]?.value ?? [];
         const latest = values[values.length - 1];
-        return `${siteName} (${siteCode})\n  ${varName}: ${latest?.value ?? "N/A"} ${unit} (${latest?.dateTime ?? "?"})  |  ${values.length} readings`;
+        return {
+          siteName: ts.sourceInfo?.siteName ?? null,
+          siteCode: ts.sourceInfo?.siteCode?.[0]?.value ?? null,
+          variable: ts.variable?.variableName ?? null,
+          unit: ts.variable?.unit?.unitCode ?? null,
+          latestValue: latest?.value ?? null,
+          latestDateTime: latest?.dateTime ?? null,
+          readingCount: values.length,
+        };
       });
-      return { content: [{ type: "text" as const, text: `${series.length} time series found:\n\n${summaries.join("\n\n")}` }] };
+      return listResponse(`${series.length} water time series found`, { items, total: series.length });
     },
   },
 
@@ -180,11 +192,23 @@ export const tools: Tool<any, any>[] = [
         countyCd: args.county_cd,
         siteType: args.site_type,
       });
-      // RDB format comes back as a string
+      // RDB format comes back as a string — parse tab-separated rows into objects
       const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
       const lines = text.split("\n").filter((l: string) => !l.startsWith("#"));
-      const preview = lines.slice(0, 50).join("\n");
-      return { content: [{ type: "text" as const, text: `Water monitoring sites:\n\n${preview}${lines.length > 50 ? `\n\n... ${lines.length - 50} more rows` : ""}` }] };
+      // First non-comment line is the header, second is dashes, rest are data
+      const header = lines[0]?.split("\t") ?? [];
+      const dataLines = lines.slice(2); // skip header + dash line
+      const rows = dataLines.map((line: string) => {
+        const vals = line.split("\t");
+        const obj: Record<string, unknown> = {};
+        header.forEach((h: string, i: number) => { if (h) obj[h] = vals[i] ?? null; });
+        return obj;
+      }).filter((r: Record<string, unknown>) => Object.values(r).some(v => v));
+      if (!rows.length) return emptyResponse("No water monitoring sites found.");
+      return tableResponse(
+        `Water monitoring sites: ${dataLines.length} total`,
+        { rows, total: dataLines.length },
+      );
     },
   },
 
@@ -213,19 +237,25 @@ export const tools: Tool<any, any>[] = [
         endDT: args.end_dt,
       });
       const series = data?.value?.timeSeries ?? [];
-      if (!series.length) return { content: [{ type: "text" as const, text: "No daily water data found." }] };
+      if (!series.length) return emptyResponse("No daily water data found.");
 
-      const summaries = series.slice(0, 10).map((ts) => {
-        const siteName = ts.sourceInfo?.siteName ?? "Unknown";
-        const siteCode = ts.sourceInfo?.siteCode?.[0]?.value ?? "?";
-        const varName = ts.variable?.variableName ?? "?";
-        const unit = ts.variable?.unit?.unitCode ?? "";
+      const items = series.map((ts: any) => {
         const values = ts.values?.[0]?.value ?? [];
         const latest = values[values.length - 1];
         const earliest = values[0];
-        return `${siteName} (${siteCode})\n  ${varName}: ${values.length} daily values\n  Latest: ${latest?.value ?? "N/A"} ${unit} (${latest?.dateTime?.split("T")[0] ?? "?"})\n  Earliest: ${earliest?.value ?? "N/A"} ${unit} (${earliest?.dateTime?.split("T")[0] ?? "?"})` ;
+        return {
+          siteName: ts.sourceInfo?.siteName ?? null,
+          siteCode: ts.sourceInfo?.siteCode?.[0]?.value ?? null,
+          variable: ts.variable?.variableName ?? null,
+          unit: ts.variable?.unit?.unitCode ?? null,
+          dailyValueCount: values.length,
+          latestValue: latest?.value ?? null,
+          latestDate: latest?.dateTime?.split("T")[0] ?? null,
+          earliestValue: earliest?.value ?? null,
+          earliestDate: earliest?.dateTime?.split("T")[0] ?? null,
+        };
       });
-      return { content: [{ type: "text" as const, text: `${series.length} time series found:\n\n${summaries.join("\n\n")}` }] };
+      return listResponse(`${series.length} daily water time series found`, { items, total: series.length });
     },
   },
 ];

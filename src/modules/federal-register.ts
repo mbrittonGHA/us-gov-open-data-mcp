@@ -15,6 +15,7 @@ import {
   listAgencies,
   type FRDocument,
 } from "../sdk/federal-register.js";
+import { listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -90,13 +91,11 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ keyword, president, year, per_page, page }) => {
       const data = await searchExecutiveOrders({ keyword, president, year, per_page, page });
       const results = data.results ?? [];
-      if (!results.length) return JSON.stringify({ summary: "No executive orders found.", count: 0, results: [] });
-      return JSON.stringify({
-        summary: `Executive orders: ${data.count} total, showing ${results.length}`,
-        count: data.count,
-        totalPages: data.total_pages,
-        results: results.map(summarizeDoc),
-      });
+      if (!results.length) return emptyResponse("No executive orders found.");
+      return listResponse(
+        `Executive orders: ${data.count} total, showing ${results.length}`,
+        { items: results.map(summarizeDoc), total: data.count, meta: { totalPages: data.total_pages } },
+      );
     },
   },
 
@@ -118,13 +117,11 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ keyword, doc_type, president, start_date, end_date, per_page }) => {
       const data = await searchPresidentialDocuments({ keyword, doc_type, president, start_date, end_date, per_page });
       const results = data.results ?? [];
-      if (!results.length) return JSON.stringify({ summary: "No presidential documents found.", count: 0, results: [] });
-      return JSON.stringify({
-        summary: `Presidential documents: ${data.count} total, showing ${results.length}`,
-        count: data.count,
-        totalPages: data.total_pages,
-        results: results.map(summarizeDoc),
-      });
+      if (!results.length) return emptyResponse("No presidential documents found.");
+      return listResponse(
+        `Presidential documents: ${data.count} total, showing ${results.length}`,
+        { items: results.map(summarizeDoc), total: data.count, meta: { totalPages: data.total_pages } },
+      );
     },
   },
 
@@ -146,13 +143,11 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ keyword, doc_type, agency, start_date, end_date, per_page, significant }) => {
       const data = await searchRules({ keyword, doc_type, agency, start_date, end_date, per_page, significant });
       const results = data.results ?? [];
-      if (!results.length) return JSON.stringify({ summary: "No rules/notices found.", count: 0, results: [] });
-      return JSON.stringify({
-        summary: `Federal Register documents: ${data.count} total, showing ${results.length}`,
-        count: data.count,
-        totalPages: data.total_pages,
-        results: results.map(summarizeDoc),
-      });
+      if (!results.length) return emptyResponse("No rules/notices found.");
+      return listResponse(
+        `Federal Register documents: ${data.count} total, showing ${results.length}`,
+        { items: results.map(summarizeDoc), total: data.count, meta: { totalPages: data.total_pages } },
+      );
     },
   },
   {
@@ -166,20 +161,23 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ document_number }) => {
       const doc = await getDocumentDetail(document_number);
-      if (!doc) return JSON.stringify({ error: "Document not found." });
-      return JSON.stringify({
-        title: doc.title,
-        type: doc.type,
-        documentNumber: doc.document_number,
-        publicationDate: doc.publication_date,
-        agencies: (doc as any).agencies?.map((a: any) => a.name),
-        abstract: (doc as any).abstract,
-        htmlUrl: doc.html_url,
-        pdfUrl: (doc as any).pdf_url,
-        citation: (doc as any).citation,
-        signingDate: (doc as any).signing_date,
-        executiveOrderNumber: (doc as any).executive_order_number,
-      });
+      if (!doc) return emptyResponse("Document not found.");
+      return recordResponse(
+        `${doc.title} (${doc.document_number})`,
+        {
+          title: doc.title,
+          type: doc.type,
+          documentNumber: doc.document_number,
+          publicationDate: doc.publication_date,
+          agencies: (doc as any).agencies?.map((a: any) => a.name),
+          abstract: (doc as any).abstract,
+          htmlUrl: doc.html_url,
+          pdfUrl: (doc as any).pdf_url,
+          citation: (doc as any).citation,
+          signingDate: (doc as any).signing_date,
+          executiveOrderNumber: (doc as any).executive_order_number,
+        },
+      );
     },
   },
 
@@ -192,12 +190,12 @@ export const tools: Tool<any, any>[] = [
     parameters: z.object({}),
     execute: async () => {
       const agencies = await listAgencies();
-      if (!agencies?.length) return "No agencies returned.";
+      if (!agencies?.length) return emptyResponse("No agencies returned.");
       const top = agencies.filter((a: any) => !a.parent_id).slice(0, 50);
-      return JSON.stringify({
-        summary: `${agencies.length} total agencies (showing ${top.length} top-level)`,
-        agencies: top.map((a: any) => ({ name: a.name, shortName: a.short_name, slug: a.slug })),
-      });
+      return listResponse(
+        `${agencies.length} total agencies (showing ${top.length} top-level)`,
+        { items: top.map((a: any) => ({ name: a.name, shortName: a.short_name, slug: a.slug })), total: agencies.length },
+      );
     },
   },];
 

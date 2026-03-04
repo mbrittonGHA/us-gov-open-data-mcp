@@ -17,6 +17,7 @@ import {
   clearCache as sdkClearCache,
   type NihProject,
 } from "../sdk/nih.js";
+import { tableResponse, listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -50,55 +51,46 @@ export const reference = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-function summarizeProject(p: NihProject): string {
-  const parts: string[] = [];
-
-  parts.push(`${p.project_num ?? p.core_project_num ?? "?"} — ${p.project_title ?? "Untitled"}`);
-  parts.push(`FY${p.fiscal_year ?? "?"} | Award: $${(p.award_amount ?? 0).toLocaleString()}`);
-
-  if (p.direct_cost_amt || p.indirect_cost_amt) {
-    parts.push(`  Direct: $${(p.direct_cost_amt ?? 0).toLocaleString()} | Indirect: $${(p.indirect_cost_amt ?? 0).toLocaleString()}`);
-  }
-
-  parts.push(`Activity: ${p.activity_code ?? "?"} | Mechanism: ${p.funding_mechanism ?? "?"}`);
-
-  if (p.agency_ic_admin) {
-    parts.push(`Agency: ${p.agency_ic_admin.abbreviation ?? "?"} (${p.agency_ic_admin.name ?? ""})`);
-  }
+function projectToRecord(p: NihProject): Record<string, unknown> {
+  const record: Record<string, unknown> = {
+    project_num: p.project_num ?? p.core_project_num ?? null,
+    project_title: p.project_title ?? "Untitled",
+    fiscal_year: p.fiscal_year ?? null,
+    award_amount: p.award_amount ?? 0,
+    direct_cost: p.direct_cost_amt ?? null,
+    indirect_cost: p.indirect_cost_amt ?? null,
+    activity_code: p.activity_code ?? null,
+    funding_mechanism: p.funding_mechanism ?? null,
+    agency: p.agency_ic_admin?.abbreviation ?? null,
+    agency_name: p.agency_ic_admin?.name ?? null,
+    is_active: p.is_active ?? null,
+    project_start_date: p.project_start_date?.slice(0, 10) ?? null,
+    project_end_date: p.project_end_date?.slice(0, 10) ?? null,
+  };
 
   if (p.agency_ic_fundings?.length) {
-    const funders = p.agency_ic_fundings.map(f =>
-      `${f.abbreviation ?? "?"}: $${(f.total_cost ?? 0).toLocaleString()}`
-    ).join(", ");
-    parts.push(`Funding ICs: ${funders}`);
+    record.funding_ics = p.agency_ic_fundings.map(f => ({
+      abbreviation: f.abbreviation ?? null,
+      total_cost: f.total_cost ?? 0,
+    }));
   }
 
   const pis = p.principal_investigators?.map(pi => pi.full_name).filter(Boolean);
-  if (pis?.length) parts.push(`PI(s): ${pis.join(", ")}`);
+  if (pis?.length) record.principal_investigators = pis;
 
   if (p.organization) {
     const org = p.organization;
-    parts.push(`Org: ${org.org_name ?? "?"}, ${org.city ?? org.org_city ?? ""} ${org.state ?? org.org_state ?? ""}`);
-    if (org.dept_type) parts.push(`Dept: ${org.dept_type}`);
+    record.organization = org.org_name ?? null;
+    record.org_city = org.city ?? org.org_city ?? null;
+    record.org_state = org.state ?? org.org_state ?? null;
+    if (org.dept_type) record.department = org.dept_type;
   }
 
-  parts.push(`Active: ${p.is_active ? "Yes" : "No"}`);
-  if (p.project_start_date) parts.push(`Start: ${p.project_start_date.slice(0, 10)}`);
-  if (p.project_end_date) parts.push(`End: ${p.project_end_date.slice(0, 10)}`);
+  if (p.spending_categories_desc) record.spending_categories = p.spending_categories_desc;
+  if (p.covid_response?.length) record.covid_response = p.covid_response;
+  if (p.project_detail_url) record.detail_url = p.project_detail_url;
 
-  if (p.spending_categories_desc) {
-    parts.push(`Categories: ${p.spending_categories_desc}`);
-  }
-
-  if (p.covid_response?.length) {
-    parts.push(`COVID Response: ${p.covid_response.join(", ")}`);
-  }
-
-  if (p.project_detail_url) {
-    parts.push(`Details: ${p.project_detail_url}`);
-  }
-
-  return parts.join("\n");
+  return record;
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────
@@ -154,12 +146,14 @@ export const tools: Tool<any, any>[] = [
       });
 
       if (!data.results?.length) {
-        return { content: [{ type: "text" as const, text: "No NIH projects found matching the criteria." }] };
+        return emptyResponse("No NIH projects found matching the criteria.");
       }
 
-      const header = `${(data.meta.total ?? 0).toLocaleString()} total projects found (showing ${data.results.length})`;
-      const summaries = data.results.map(summarizeProject);
-      return { content: [{ type: "text" as const, text: `${header}\n\n${summaries.join("\n\n---\n\n")}` }] };
+      const items = data.results.map(projectToRecord);
+      return listResponse(
+        `${(data.meta.total ?? 0).toLocaleString()} total projects found (showing ${data.results.length})`,
+        { items, total: data.meta.total ?? 0 },
+      );
     },
   },
 
@@ -187,14 +181,18 @@ export const tools: Tool<any, any>[] = [
       });
 
       if (!data.results?.length) {
-        return { content: [{ type: "text" as const, text: "No publications found." }] };
+        return emptyResponse("No publications found.");
       }
 
-      const header = `${(data.meta.total ?? 0).toLocaleString()} total publications (showing ${data.results.length})`;
-      const lines = data.results.map(p =>
-        `PMID: ${p.pmid ?? "?"} | Project: ${p.coreproject ?? "?"} | AppID: ${p.applid ?? "?"}`
+      const items = data.results.map(p => ({
+        pmid: p.pmid ?? null,
+        coreproject: p.coreproject ?? null,
+        applid: p.applid ?? null,
+      }));
+      return listResponse(
+        `${(data.meta.total ?? 0).toLocaleString()} total publications (showing ${data.results.length})`,
+        { items, total: data.meta.total ?? 0 },
       );
-      return { content: [{ type: "text" as const, text: `${header}\n\n${lines.join("\n")}` }] };
     },
   },
 
@@ -214,19 +212,18 @@ export const tools: Tool<any, any>[] = [
     execute: async (args) => {
       const data = await getSpendingByCategory(args.category_id, args.fiscal_years);
 
-      const lines = Object.entries(data.years)
+      const yearRecords = Object.entries(data.years)
         .sort(([a], [b]) => Number(a) - Number(b))
-        .map(([year, info]) => {
-          const funding = info.totalFunding > 0 ? ` | Top-50 funding: $${info.totalFunding.toLocaleString()}` : "";
-          return `  FY${year}: ${info.projects.toLocaleString()} projects${funding} (via ${info.method})`;
-        });
+        .reduce((acc, [year, info]) => {
+          acc[`FY${year}`] = { projects: info.projects, totalFunding: info.totalFunding, method: info.method };
+          return acc;
+        }, {} as Record<string, unknown>);
 
-      return {
-        content: [{
-          type: "text" as const,
-          text: `NIH funding for "${data.category}" (RCDC #${args.category_id}):\n${lines.join("\n")}\n\nNote: Funding shown is sum of top-50 awards; actual totals are higher. Project counts via agency are more complete than RCDC tags.`,
-        }],
-      };
+      return recordResponse(
+        `NIH funding for "${data.category}" (RCDC #${args.category_id})`,
+        { category: data.category, categoryId: args.category_id, years: yearRecords },
+        { note: "Funding shown is sum of top-50 awards; actual totals are higher. Project counts via agency are more complete than RCDC tags." },
+      );
     },
   },
 
@@ -245,19 +242,19 @@ export const tools: Tool<any, any>[] = [
       const data = await getProjectsByAgency(args.fiscal_year, args.agencies);
 
       if (!data.length) {
-        return { content: [{ type: "text" as const, text: "No data found." }] };
+        return emptyResponse("No data found.");
       }
 
-      const lines = data.map(d =>
-        `  ${d.agency.padEnd(8)} ${d.name.padEnd(60)} ${d.projectCount.toLocaleString()} projects`
-      );
+      const rows = data.map(d => ({
+        agency: d.agency,
+        name: d.name,
+        projectCount: d.projectCount,
+      }));
       const total = data.reduce((sum, d) => sum + d.projectCount, 0);
-      return {
-        content: [{
-          type: "text" as const,
-          text: `NIH projects by institute (FY${args.fiscal_year}):\n${lines.join("\n")}\n\nTotal: ${total.toLocaleString()} projects`,
-        }],
-      };
+      return tableResponse(
+        `NIH projects by institute (FY${args.fiscal_year}): ${total.toLocaleString()} total`,
+        { rows, total: rows.length },
+      );
     },
   },
 ];

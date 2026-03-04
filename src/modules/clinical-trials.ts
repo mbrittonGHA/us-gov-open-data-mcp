@@ -15,6 +15,7 @@ import {
   clearCache as sdkClearCache,
   type TrialStudy,
 } from "../sdk/clinical-trials.js";
+import { listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -39,44 +40,49 @@ export const reference = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-function summarizeTrial(study: TrialStudy): string {
+function trialToRecord(study: TrialStudy): Record<string, unknown> {
   const p = study.protocolSection;
-  if (!p) return "No protocol data available.";
+  if (!p) return { error: "No protocol data available" };
   const id = p.identificationModule;
   const status = p.statusModule;
   const design = p.designModule;
   const sponsor = p.sponsorCollaboratorsModule;
-  const conds = p.conditionsModule?.conditions?.join(", ") ?? "N/A";
+  const conds = p.conditionsModule?.conditions?.join(", ") ?? null;
   const interventions = p.armsInterventionsModule?.interventions
     ?.map((i) => `${i.type ?? "?"}: ${i.name ?? "?"}`)
-    .join("; ") ?? "N/A";
+    .join("; ") ?? null;
 
-  const parts = [
-    `${id?.nctId ?? "?"} — ${id?.briefTitle ?? "Untitled"}`,
-    `Status: ${status?.overallStatus ?? "?"}`,
-    `Phase: ${design?.phases?.join(", ") ?? "N/A"}`,
-    `Type: ${design?.studyType ?? "?"}`,
-    `Sponsor: ${sponsor?.leadSponsor?.name ?? "?"} (${sponsor?.leadSponsor?.class ?? "?"})`,
-    `Conditions: ${conds}`,
-    `Interventions: ${interventions}`,
-    `Enrollment: ${design?.enrollmentInfo?.count ?? "?"} (${design?.enrollmentInfo?.type ?? "?"})`,
-  ];
-
-  if (status?.startDateStruct?.date) parts.push(`Start: ${status.startDateStruct.date}`);
-  if (status?.primaryCompletionDateStruct?.date) parts.push(`Primary Completion: ${status.primaryCompletionDateStruct.date}`);
+  const record: Record<string, unknown> = {
+    nctId: id?.nctId ?? null,
+    title: id?.briefTitle ?? "Untitled",
+    status: status?.overallStatus ?? null,
+    phase: design?.phases?.join(", ") ?? null,
+    studyType: design?.studyType ?? null,
+    sponsor: sponsor?.leadSponsor?.name ?? null,
+    sponsorClass: sponsor?.leadSponsor?.class ?? null,
+    conditions: conds,
+    interventions,
+    enrollmentCount: design?.enrollmentInfo?.count ?? null,
+    enrollmentType: design?.enrollmentInfo?.type ?? null,
+    startDate: status?.startDateStruct?.date ?? null,
+    primaryCompletionDate: status?.primaryCompletionDateStruct?.date ?? null,
+  };
 
   const collabs = sponsor?.collaborators?.map((c) => c.name).join(", ");
-  if (collabs) parts.push(`Collaborators: ${collabs}`);
+  if (collabs) record.collaborators = collabs;
 
   const locations = p.contactsLocationsModule?.locations?.slice(0, 5);
   if (locations?.length) {
-    parts.push(`Locations (${p.contactsLocationsModule?.locations?.length ?? 0} total):`);
-    locations.forEach((l) => {
-      parts.push(`  ${l.facility ?? "?"}, ${l.city ?? ""} ${l.state ?? ""} ${l.country ?? ""}`);
-    });
+    record.locationCount = p.contactsLocationsModule?.locations?.length ?? 0;
+    record.locations = locations.map((l) => ({
+      facility: l.facility ?? null,
+      city: l.city ?? null,
+      state: l.state ?? null,
+      country: l.country ?? null,
+    }));
   }
 
-  return parts.join("\n");
+  return record;
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────
@@ -112,11 +118,13 @@ export const tools: Tool<any, any>[] = [
         state: args.location,
         pageSize: args.page_size,
       });
-      if (!data.studies?.length) return { content: [{ type: "text" as const, text: "No clinical trials found matching the criteria." }] };
+      if (!data.studies?.length) return emptyResponse("No clinical trials found matching the criteria.");
 
-      const header = `${data.totalCount} total trials found (showing ${data.studies.length})`;
-      const summaries = data.studies.map(summarizeTrial);
-      return { content: [{ type: "text" as const, text: `${header}\n\n${summaries.join("\n\n---\n\n")}` }] };
+      const items = data.studies.map(trialToRecord);
+      return listResponse(
+        `${data.totalCount} total trials found (showing ${data.studies.length})`,
+        { items, total: data.totalCount },
+      );
     },
   },
 
@@ -131,29 +139,25 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const study = await getTrialDetail(args.nct_id);
-      const summary = summarizeTrial(study);
+      const record = trialToRecord(study);
 
       // Add eligibility if available
       const elig = study.protocolSection?.eligibilityModule;
-      let extra = "";
       if (elig) {
-        const pieces = [
-          `\n\n--- ELIGIBILITY ---`,
-          `Sex: ${elig.sex ?? "All"}`,
-          `Ages: ${elig.minimumAge ?? "N/A"} to ${elig.maximumAge ?? "N/A"}`,
-          `Healthy Volunteers: ${elig.healthyVolunteers ? "Yes" : "No"}`,
-        ];
+        record.eligibilitySex = elig.sex ?? "All";
+        record.eligibilityMinAge = elig.minimumAge ?? null;
+        record.eligibilityMaxAge = elig.maximumAge ?? null;
+        record.healthyVolunteers = elig.healthyVolunteers ?? false;
         if (elig.eligibilityCriteria) {
-          pieces.push(`\nCriteria:\n${elig.eligibilityCriteria.slice(0, 2000)}`);
+          record.eligibilityCriteria = elig.eligibilityCriteria.slice(0, 2000);
         }
-        extra = pieces.join("\n");
       }
 
       // Add brief summary
       const desc = study.protocolSection?.descriptionModule?.briefSummary;
-      if (desc) extra += `\n\n--- SUMMARY ---\n${desc}`;
+      if (desc) record.briefSummary = desc;
 
-      return { content: [{ type: "text" as const, text: summary + extra }] };
+      return recordResponse(`${record.nctId ?? args.nct_id} — ${record.title ?? "Clinical Trial"}`, record);
     },
   },
 
@@ -172,32 +176,23 @@ export const tools: Tool<any, any>[] = [
       const data = args.search_as_drug
         ? await getTrialEnrollmentStats(args.condition, { intervention: args.condition })
         : await getTrialEnrollmentStats(args.condition);
-      const lines = Object.entries(data.statuses).map(
-        ([status, count]) => `  ${status}: ${count.toLocaleString()}`,
-      );
       const total = Object.values(data.statuses).reduce((a, b) => a + b, 0);
       // If zero results for condition search, auto-retry as intervention
       if (total === 0 && !args.search_as_drug) {
         const retryData = await getTrialEnrollmentStats(args.condition, { intervention: args.condition });
         const retryTotal = Object.values(retryData.statuses).reduce((a, b) => a + b, 0);
         if (retryTotal > 0) {
-          const retryLines = Object.entries(retryData.statuses).map(
-            ([status, count]) => `  ${status}: ${count.toLocaleString()}`,
+          return recordResponse(
+            `Clinical trials for "${args.condition}" as intervention (${retryTotal.toLocaleString()} total)`,
+            { condition: args.condition, searchType: "intervention", total: retryTotal, statuses: retryData.statuses },
           );
-          return {
-            content: [{
-              type: "text" as const,
-              text: `Clinical trials for "${args.condition}" as intervention (${retryTotal.toLocaleString()} total):\n${retryLines.join("\n")}`,
-            }],
-          };
         }
       }
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Clinical trials for "${data.condition}" (${total.toLocaleString()} total):\n${lines.join("\n")}`,
-        }],
-      };
+      if (total === 0) return emptyResponse(`No clinical trials found for "${args.condition}".`);
+      return recordResponse(
+        `Clinical trials for "${data.condition}" (${total.toLocaleString()} total)`,
+        { condition: data.condition, total, statuses: data.statuses },
+      );
     },
   },
 ];

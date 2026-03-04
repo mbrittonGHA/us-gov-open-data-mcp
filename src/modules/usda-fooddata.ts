@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { Tool } from "fastmcp";
 import { searchFoods, getFood, listFoods, DATA_TYPES } from "../sdk/usda-fooddata.js";
+import { listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -53,21 +54,23 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await searchFoods(args);
-      if (!data.foods?.length) return `No foods found for '${args.query}'.`;
-      return JSON.stringify({
-        summary: `Found ${data.totalHits} foods matching '${args.query}', showing ${data.foods.length} (page ${data.currentPage} of ${data.totalPages})`,
-        total: data.totalHits,
-        foods: data.foods.map(f => ({
-          fdcId: f.fdcId,
-          description: f.description,
-          dataType: f.dataType,
-          brandOwner: f.brandOwner,
-          brandName: f.brandName,
-          ingredients: f.ingredients,
-          servingSize: f.servingSize ? `${f.servingSize} ${f.servingSizeUnit || "g"}` : undefined,
-          nutrients: f.foodNutrients?.slice(0, 15).map(formatNutrient).filter(Boolean),
-        })),
-      });
+      if (!data.foods?.length) return emptyResponse(`No foods found for '${args.query}'.`);
+      return listResponse(
+        `Found ${data.totalHits} foods matching '${args.query}', showing ${data.foods.length} (page ${data.currentPage} of ${data.totalPages})`,
+        {
+          total: data.totalHits,
+          items: data.foods.map(f => ({
+            fdcId: f.fdcId,
+            description: f.description,
+            dataType: f.dataType,
+            brandOwner: f.brandOwner,
+            brandName: f.brandName,
+            ingredients: f.ingredients,
+            servingSize: f.servingSize ? `${f.servingSize} ${f.servingSizeUnit || "g"}` : undefined,
+            nutrients: f.foodNutrients?.slice(0, 15).map(formatNutrient).filter(Boolean),
+          })),
+        },
+      );
     },
   },
 
@@ -83,18 +86,21 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ fdcId }) => {
       const food = await getFood(fdcId);
-      return JSON.stringify({
-        fdcId: food.fdcId,
-        description: food.description,
-        dataType: food.dataType,
-        brandOwner: food.brandOwner,
-        brandName: food.brandName,
-        ingredients: food.ingredients,
-        servingSize: food.servingSize ? `${food.servingSize} ${food.servingSizeUnit || "g"}` : undefined,
-        category: food.foodCategory?.description,
-        published: food.publishedDate,
-        nutrients: food.foodNutrients?.map(formatNutrient).filter(Boolean),
-      });
+      return recordResponse(
+        `${food.description} (FDC ${food.fdcId})`,
+        {
+          fdcId: food.fdcId,
+          description: food.description,
+          dataType: food.dataType,
+          brandOwner: food.brandOwner,
+          brandName: food.brandName,
+          ingredients: food.ingredients,
+          servingSize: food.servingSize ? `${food.servingSize} ${food.servingSizeUnit || "g"}` : undefined,
+          category: food.foodCategory?.description,
+          published: food.publishedDate,
+          nutrients: food.foodNutrients?.map(formatNutrient).filter(Boolean),
+        },
+      );
     },
   },
 
@@ -113,16 +119,18 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await listFoods(args);
-      if (!data?.length) return "No foods found.";
-      return JSON.stringify({
-        summary: `Returned ${data.length} foods${args.dataType ? ` (${args.dataType.join(", ")})` : ""}`,
-        foods: data.map(f => ({
-          fdcId: f.fdcId,
-          description: f.description,
-          dataType: f.dataType,
-          published: f.publishedDate,
-        })),
-      });
+      if (!data?.length) return emptyResponse("No foods found.");
+      return listResponse(
+        `Returned ${data.length} foods${args.dataType ? ` (${args.dataType.join(", ")})` : ""}`,
+        {
+          items: data.map(f => ({
+            fdcId: f.fdcId,
+            description: f.description,
+            dataType: f.dataType,
+            published: f.publishedDate,
+          })),
+        },
+      );
     },
   },
 ];

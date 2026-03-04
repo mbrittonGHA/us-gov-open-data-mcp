@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { Tool } from "fastmcp";
 import { searchDrugEvents, searchDrugLabels, searchFoodRecalls, searchDeviceEvents, countDrugEvents, searchDrugRecalls, searchApprovedDrugs, searchFoodAdverseEvents, searchDeviceRecalls } from "../sdk/fda.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 export const name = "fda";
 export const displayName = "FDA (OpenFDA)";
@@ -56,19 +57,21 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ search, limit }) => {
       const data = await searchDrugEvents({ search, limit });
-      if (!data.results?.length) return "No drug event reports found.";
-      return JSON.stringify({
-        summary: `FDA drug adverse events: ${data.meta?.results?.total ?? "?"} total reports, showing ${data.results.length}`,
-        total: data.meta?.results?.total,
-        results: data.results.slice(0, 20).map((r: any) => ({
-          reportId: r.safetyreportid,
-          serious: r.serious === "1",
-          death: r.seriousnessdeath === "1",
-          receiveDate: r.receivedate,
-          drugs: r.patient?.drug?.map((d: any) => d.medicinalproduct || d.openfda?.brand_name?.[0]).filter(Boolean),
-          reactions: r.patient?.reaction?.map((rx: any) => rx.reactionmeddrapt).filter(Boolean),
-        })),
-      });
+      if (!data.results?.length) return emptyResponse("No drug event reports found.");
+      return listResponse(
+        `FDA drug adverse events: ${data.meta?.results?.total ?? "?"} total reports, showing ${data.results.length}`,
+        {
+          total: data.meta?.results?.total,
+          items: data.results.slice(0, 20).map((r: any) => ({
+            reportId: r.safetyreportid,
+            serious: r.serious === "1",
+            death: r.seriousnessdeath === "1",
+            receiveDate: r.receivedate,
+            drugs: r.patient?.drug?.map((d: any) => d.medicinalproduct || d.openfda?.brand_name?.[0]).filter(Boolean),
+            reactions: r.patient?.reaction?.map((rx: any) => rx.reactionmeddrapt).filter(Boolean),
+          })),
+        },
+      );
     },
   },
 
@@ -91,12 +94,14 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ count_field, search, limit }) => {
       const data = await countDrugEvents(count_field, { search, limit });
-      if (!data.results?.length) return "No count data found.";
-      return JSON.stringify({
-        summary: `FDA drug event counts by ${count_field}: ${data.results.length} categories`,
-        field: count_field,
-        counts: data.results.slice(0, 50),
-      });
+      if (!data.results?.length) return emptyResponse("No count data found.");
+      return tableResponse(
+        `FDA drug event counts by ${count_field}: ${data.results.length} categories`,
+        {
+          rows: data.results.slice(0, 50),
+          meta: { field: count_field },
+        },
+      );
     },
   },
 
@@ -116,21 +121,23 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ search, limit }) => {
       const data = await searchFoodRecalls({ search, limit });
-      if (!data.results?.length) return "No food recalls found.";
-      return JSON.stringify({
-        summary: `FDA food recalls: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
-        total: data.meta?.results?.total,
-        results: data.results.slice(0, 20).map((r: any) => ({
-          classification: r.classification,
-          reason: r.reason_for_recall,
-          firm: r.recalling_firm,
-          state: r.state,
-          status: r.status,
-          productDescription: r.product_description?.substring(0, 200),
-          recallDate: r.recall_initiation_date,
-          distribution: r.distribution_pattern?.substring(0, 200),
-        })),
-      });
+      if (!data.results?.length) return emptyResponse("No food recalls found.");
+      return listResponse(
+        `FDA food recalls: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
+        {
+          total: data.meta?.results?.total,
+          items: data.results.slice(0, 20).map((r: any) => ({
+            classification: r.classification,
+            reason: r.reason_for_recall,
+            firm: r.recalling_firm,
+            state: r.state,
+            status: r.status,
+            productDescription: r.product_description?.substring(0, 200),
+            recallDate: r.recall_initiation_date,
+            distribution: r.distribution_pattern?.substring(0, 200),
+          })),
+        },
+      );
     },
   },
 
@@ -144,18 +151,20 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ search, limit }) => {
       const data = await searchDeviceEvents({ search, limit });
-      if (!data.results?.length) return "No device event reports found.";
-      return JSON.stringify({
-        summary: `FDA device events: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
-        total: data.meta?.results?.total,
-        results: data.results.slice(0, 20).map((r: any) => ({
-          eventType: r.event_type,
-          date: r.date_received,
-          deviceName: r.device?.[0]?.generic_name,
-          manufacturer: r.device?.[0]?.manufacturer_d_name,
-          description: (r.mdr_text?.[0]?.text || "").substring(0, 300),
-        })),
-      });
+      if (!data.results?.length) return emptyResponse("No device event reports found.");
+      return listResponse(
+        `FDA device events: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
+        {
+          total: data.meta?.results?.total,
+          items: data.results.slice(0, 20).map((r: any) => ({
+            eventType: r.event_type,
+            date: r.date_received,
+            deviceName: r.device?.[0]?.generic_name,
+            manufacturer: r.device?.[0]?.manufacturer_d_name,
+            description: (r.mdr_text?.[0]?.text || "").substring(0, 300),
+          })),
+        },
+      );
     },
   },
 
@@ -173,16 +182,19 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ search, limit }) => {
       const data = await searchDrugRecalls({ search, limit });
-      if (!data.results?.length) return "No drug recalls found.";
-      return JSON.stringify({
-        summary: `FDA drug recalls: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
-        results: data.results.slice(0, 20).map((r: any) => ({
-          recallNumber: r.recall_number, classification: r.classification,
-          firm: r.recalling_firm, date: r.recall_initiation_date,
-          reason: r.reason_for_recall, product: r.product_description?.substring(0, 200),
-          status: r.status,
-        })),
-      });
+      if (!data.results?.length) return emptyResponse("No drug recalls found.");
+      return listResponse(
+        `FDA drug recalls: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
+        {
+          total: data.meta?.results?.total,
+          items: data.results.slice(0, 20).map((r: any) => ({
+            recallNumber: r.recall_number, classification: r.classification,
+            firm: r.recalling_firm, date: r.recall_initiation_date,
+            reason: r.reason_for_recall, product: r.product_description?.substring(0, 200),
+            status: r.status,
+          })),
+        },
+      );
     },
   },
 
@@ -199,23 +211,26 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ search, limit }) => {
       const data = await searchApprovedDrugs({ search, limit });
-      if (!data.results?.length) return "No approved drugs found.";
-      return JSON.stringify({
-        summary: `FDA approved drugs: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
-        results: data.results.slice(0, 20).map((r: any) => ({
-          applicationNumber: r.application_number, sponsor: r.sponsor_name,
-          products: r.products?.map((p: any) => ({
-            brandName: p.brand_name, route: p.route, dosageForm: p.dosage_form,
-            activeIngredients: p.active_ingredients?.map((i: any) => `${i.name} ${i.strength}`).join(", "),
-            marketingStatus: p.marketing_status,
+      if (!data.results?.length) return emptyResponse("No approved drugs found.");
+      return listResponse(
+        `FDA approved drugs: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
+        {
+          total: data.meta?.results?.total,
+          items: data.results.slice(0, 20).map((r: any) => ({
+            applicationNumber: r.application_number, sponsor: r.sponsor_name,
+            products: r.products?.map((p: any) => ({
+              brandName: p.brand_name, route: p.route, dosageForm: p.dosage_form,
+              activeIngredients: p.active_ingredients?.map((i: any) => `${i.name} ${i.strength}`).join(", "),
+              marketingStatus: p.marketing_status,
+            })),
+            latestSubmission: r.submissions?.[0] ? {
+              type: r.submissions[0].submission_type,
+              status: r.submissions[0].submission_status,
+              date: r.submissions[0].submission_status_date,
+            } : undefined,
           })),
-          latestSubmission: r.submissions?.[0] ? {
-            type: r.submissions[0].submission_type,
-            status: r.submissions[0].submission_status,
-            date: r.submissions[0].submission_status_date,
-          } : undefined,
-        })),
-      });
+        },
+      );
     },
   },
 
@@ -231,16 +246,19 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ search, limit }) => {
       const data = await searchFoodAdverseEvents({ search, limit });
-      if (!data.results?.length) return "No food adverse event reports found.";
-      return JSON.stringify({
-        summary: `FDA food adverse events: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
-        results: data.results.slice(0, 20).map((r: any) => ({
-          reportNumber: r.report_number, date: r.date_created,
-          outcomes: r.outcomes, reactions: r.reactions,
-          products: r.products?.map((p: any) => `${p.name_brand ?? "?"} (${p.industry_name ?? "?"})`.trim()),
-          consumer: r.consumer,
-        })),
-      });
+      if (!data.results?.length) return emptyResponse("No food adverse event reports found.");
+      return listResponse(
+        `FDA food adverse events: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
+        {
+          total: data.meta?.results?.total,
+          items: data.results.slice(0, 20).map((r: any) => ({
+            reportNumber: r.report_number, date: r.date_created,
+            outcomes: r.outcomes, reactions: r.reactions,
+            products: r.products?.map((p: any) => `${p.name_brand ?? "?"} (${p.industry_name ?? "?"})`.trim()),
+            consumer: r.consumer,
+          })),
+        },
+      );
     },
   },
 
@@ -256,18 +274,21 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ search, limit }) => {
       const data = await searchDeviceRecalls({ search, limit });
-      if (!data.results?.length) return "No device recalls found.";
-      return JSON.stringify({
-        summary: `FDA device recalls: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
-        results: data.results.slice(0, 20).map((r: any) => ({
-          eventNumber: r.res_event_number,
-          product: r.product_description?.substring(0, 200),
-          reason: r.reason_for_recall?.substring(0, 300),
-          rootCause: r.root_cause_description,
-          deviceName: r.openfda?.device_name,
-          deviceClass: r.openfda?.device_class,
-        })),
-      });
+      if (!data.results?.length) return emptyResponse("No device recalls found.");
+      return listResponse(
+        `FDA device recalls: ${data.meta?.results?.total ?? "?"} total, showing ${data.results.length}`,
+        {
+          total: data.meta?.results?.total,
+          items: data.results.slice(0, 20).map((r: any) => ({
+            eventNumber: r.res_event_number,
+            product: r.product_description?.substring(0, 200),
+            reason: r.reason_for_recall?.substring(0, 300),
+            rootCause: r.root_cause_description,
+            deviceName: r.openfda?.device_name,
+            deviceClass: r.openfda?.device_class,
+          })),
+        },
+      );
     },
   },
 ];

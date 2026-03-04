@@ -16,6 +16,7 @@ import {
   routes,
   type EiaObservation,
 } from "../sdk/eia.js";
+import { timeseriesResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -38,8 +39,9 @@ export const reference = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-function formatObservations(data: EiaObservation[], limit = 60) {
-  return data.slice(0, limit).map(row => ({
+function formatObservations(data: EiaObservation[], limit?: number) {
+  const rows = limit ? data.slice(0, limit) : data;
+  return rows.map(row => ({
     period: row.period || null,
     value: row.value != null ? Number(row.value) : null,
     units: String(row.units || row.unit || ""),
@@ -80,16 +82,20 @@ export const tools: Tool<any, any>[] = [
       const data = res.response?.data || [];
       const total = res.response?.total || data.length;
 
-      if (!data.length) return JSON.stringify({ summary: "No petroleum data found.", observations: [] });
+      if (!data.length) return emptyResponse("No petroleum data found.");
 
       const observations = formatObservations(data);
-      return JSON.stringify({
-        summary: `EIA petroleum prices (${product || "crude"}): ${total} total, showing ${observations.length}`,
-        product: product || "crude",
-        frequency: frequency || "monthly",
-        total,
-        observations,
-      });
+      return timeseriesResponse(
+        `EIA petroleum prices (${product || "crude"}): ${total} total, showing ${observations.length}`,
+        {
+          rows: observations,
+          dateKey: "period",
+          valueKey: "value",
+          extraFields: ["units", "series", "state", "sector"],
+          total,
+          meta: { product: product || "crude", frequency: frequency || "monthly" },
+        },
+      );
     },
   },
 
@@ -112,9 +118,9 @@ export const tools: Tool<any, any>[] = [
       const res = await getElectricity({ state, sector, dataType: data_type, frequency, start, length });
       const data = res.response?.data || [];
 
-      if (!data.length) return JSON.stringify({ summary: "No electricity data found.", observations: [] });
+      if (!data.length) return emptyResponse("No electricity data found.");
 
-      const observations = data.slice(0, 60).map(row => ({
+      const observations = data.map(row => ({
         period: row.period || null,
         state: String(row.stateDescription || row.stateid || "US"),
         sector: String(row.sectorName || row.sectorid || "All"),
@@ -122,12 +128,16 @@ export const tools: Tool<any, any>[] = [
         units: String(row[`${data_type || "price"}-units`] || row.units || ""),
       }));
 
-      return JSON.stringify({
-        summary: `EIA electricity ${data_type || "price"}${state ? ` (${state.toUpperCase()})` : ""}: ${observations.length} observations`,
-        dataType: data_type || "price",
-        state: state?.toUpperCase() || null,
-        observations,
-      });
+      return timeseriesResponse(
+        `EIA electricity ${data_type || "price"}${state ? ` (${state.toUpperCase()})` : ""}: ${observations.length} observations`,
+        {
+          rows: observations,
+          dateKey: "period",
+          valueKey: "value",
+          extraFields: ["state", "sector", "units"],
+          meta: { dataType: data_type || "price", state: state?.toUpperCase() || null },
+        },
+      );
     },
   },
 
@@ -151,13 +161,18 @@ export const tools: Tool<any, any>[] = [
       const res = await getNaturalGas({ process, frequency, start, length });
       const data = res.response?.data || [];
 
-      if (!data.length) return JSON.stringify({ summary: "No natural gas data found.", observations: [] });
+      if (!data.length) return emptyResponse("No natural gas data found.");
 
       const observations = formatObservations(data);
-      return JSON.stringify({
-        summary: `EIA natural gas prices: ${observations.length} observations`,
-        observations,
-      });
+      return timeseriesResponse(
+        `EIA natural gas prices: ${observations.length} observations`,
+        {
+          rows: observations,
+          dateKey: "period",
+          valueKey: "value",
+          extraFields: ["units", "series", "state", "sector"],
+        },
+      );
     },
   },
 
@@ -190,9 +205,9 @@ export const tools: Tool<any, any>[] = [
       const res = await getStateEnergy({ state, msn, start, length });
       const data = res.response?.data || [];
 
-      if (!data.length) return JSON.stringify({ summary: "No state energy data found.", observations: [] });
+      if (!data.length) return emptyResponse("No state energy data found.");
 
-      const observations = data.slice(0, 60).map(row => ({
+      const observations = data.map(row => ({
         period: row.period || null,
         state: String(row.stateDescription || row.stateId || row.stateid || ""),
         value: row.value != null ? Number(row.value) : null,
@@ -200,12 +215,16 @@ export const tools: Tool<any, any>[] = [
         series: String(row.seriesDescription || row.msn || ""),
       }));
 
-      return JSON.stringify({
-        summary: `EIA state energy (${msn || "TETCB"})${state ? ` for ${state.toUpperCase()}` : ""}: ${observations.length} observations`,
-        msn: msn || "TETCB",
-        state: state?.toUpperCase() || null,
-        observations,
-      });
+      return timeseriesResponse(
+        `EIA state energy (${msn || "TETCB"})${state ? ` for ${state.toUpperCase()}` : ""}: ${observations.length} observations`,
+        {
+          rows: observations,
+          dateKey: "period",
+          valueKey: "value",
+          extraFields: ["state", "units", "series"],
+          meta: { msn: msn || "TETCB", state: state?.toUpperCase() || null },
+        },
+      );
     },
   },
 
@@ -233,20 +252,25 @@ export const tools: Tool<any, any>[] = [
       const res = await getTotalEnergy({ msn, frequency, start, length });
       const data = res.response?.data || [];
 
-      if (!data.length) return JSON.stringify({ summary: "No total energy data found.", observations: [] });
+      if (!data.length) return emptyResponse("No total energy data found.");
 
-      const observations = data.slice(0, 60).map(row => ({
+      const observations = data.map(row => ({
         period: row.period || null,
         value: row.value != null ? Number(row.value) : null,
         units: String(row.unit || row.units || ""),
         series: String(row.seriesDescription || row.msn || ""),
       }));
 
-      return JSON.stringify({
-        summary: `EIA total energy overview (${frequency || "monthly"}): ${observations.length} observations`,
-        frequency: frequency || "monthly",
-        observations,
-      });
+      return timeseriesResponse(
+        `EIA total energy overview (${frequency || "monthly"}): ${observations.length} observations`,
+        {
+          rows: observations,
+          dateKey: "period",
+          valueKey: "value",
+          extraFields: ["units", "series"],
+          meta: { frequency: frequency || "monthly" },
+        },
+      );
     },
   },
 ];

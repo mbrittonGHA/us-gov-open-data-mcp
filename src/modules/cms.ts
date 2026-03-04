@@ -11,6 +11,7 @@ import {
   clearCache as sdkClearCache,
   DATASETS,
 } from "../sdk/cms.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -23,32 +24,6 @@ export const workflow =
 export const tips =
   "CMS has 100+ provider datasets. Use cms_search to discover them. Common dataset keys: hospital_info, nursing_home_info, hospital_mortality, hospital_readmissions, hospital_infections, hospital_timely_care, hospital_spending, hospital_patient_survey, nursing_home_health_citations. Filter by state using conditions like property='state' value='CA'.";
 export const reference = { datasets: DATASETS };
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function summarizeResults(data: Record<string, unknown>[], count?: number): string {
-  if (!data.length) return "No records found.";
-
-  const preview = data.slice(0, 10);
-  const lines = preview.map((r, i) => {
-    // Try to extract key fields for readability
-    const name =
-      r.facility_name ?? r.provider_name ?? r.hospital_name ?? r["Facility Name"] ?? r["Provider Name"] ?? "";
-    const state = r.state ?? r.provider_state ?? r["State"] ?? "";
-    const city = r.city ?? r.provider_city ?? r["City"] ?? "";
-    const rating = r.overall_rating ?? r.hospital_overall_rating ?? r["Overall Rating"] ?? "";
-
-    const location = [city, state].filter(Boolean).join(", ");
-    const header = name ? `${name}${location ? ` (${location})` : ""}` : `Record ${i + 1}`;
-    const ratingStr = rating ? ` — Rating: ${rating}` : "";
-
-    return `[${i + 1}] ${header}${ratingStr}\n     ${JSON.stringify(r)}`;
-  });
-
-  const total = count ?? data.length;
-  const header = `${total} record(s)${total > 10 ? " (showing first 10)" : ""}:`;
-  return `${header}\n\n${lines.join("\n\n")}`;
-}
 
 // ─── Tools ───────────────────────────────────────────────────────────
 
@@ -63,14 +38,8 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const results = await searchDatasets(args.keyword);
-      if (!results.length) return { content: [{ type: "text" as const, text: "No datasets found." }] };
-
-      const lines = results.map(
-        (d) => `[${d.identifier}] ${d.title}\n  ${d.description?.slice(0, 200) ?? ""}${d.theme ? `\n  Theme: ${d.theme.join(", ")}` : ""}`
-      );
-      return {
-        content: [{ type: "text" as const, text: `${results.length} dataset(s) found:\n\n${lines.join("\n\n")}` }],
-      };
+      if (!results.length) return emptyResponse("No datasets found.");
+      return listResponse(`${results.length} CMS dataset(s) found`, { items: results.map(r => ({ ...r })), total: results.length });
     },
   },
   {
@@ -101,7 +70,11 @@ export const tools: Tool<any, any>[] = [
       if (args.city) conditions.push({ property: "city", value: args.city.toUpperCase() });
 
       const result = await queryByKey(args.dataset, conditions, args.limit);
-      return { content: [{ type: "text" as const, text: summarizeResults(result.results, result.count) }] };
+      if (!result.results.length) return emptyResponse("No hospital records found.");
+      return tableResponse(
+        `CMS hospital data: ${(result.count ?? result.results.length).toLocaleString()} record(s)`,
+        { rows: result.results, total: result.count },
+      );
     },
   },
   {
@@ -122,7 +95,11 @@ export const tools: Tool<any, any>[] = [
       if (args.state) conditions.push({ property: "state", value: args.state.toUpperCase() });
 
       const result = await queryByKey(args.dataset, conditions, args.limit);
-      return { content: [{ type: "text" as const, text: summarizeResults(result.results, result.count) }] };
+      if (!result.results.length) return emptyResponse("No nursing home records found.");
+      return tableResponse(
+        `CMS nursing home data: ${(result.count ?? result.results.length).toLocaleString()} record(s)`,
+        { rows: result.results, total: result.count },
+      );
     },
   },
   {
@@ -155,7 +132,11 @@ export const tools: Tool<any, any>[] = [
         limit: args.limit,
         offset: args.offset,
       });
-      return { content: [{ type: "text" as const, text: summarizeResults(result.results, result.count) }] };
+      if (!result.results.length) return emptyResponse("No records found.");
+      return tableResponse(
+        `CMS query: ${(result.count ?? result.results.length).toLocaleString()} record(s)`,
+        { rows: result.results, total: result.count },
+      );
     },
   },
 ];

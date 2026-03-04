@@ -14,6 +14,7 @@ import {
   clearCache as sdkClearCache,
   type TransportStatsRecord,
 } from "../sdk/bts.js";
+import { tableResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -36,46 +37,6 @@ export const reference = {
     "Border Crossing Data": "https://data.bts.gov/d/keg4-3bc2",
   },
 };
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function formatNum(val: string | undefined): string {
-  if (!val) return "N/A";
-  const n = Number(val);
-  return isNaN(n) ? val : n.toLocaleString();
-}
-
-function summarizeTransportStats(records: TransportStatsRecord[]): string {
-  if (!records.length) return "No transportation statistics found for the given criteria.";
-
-  const lines = records.map((r) => {
-    const date = r.date ? r.date.split("T")[0] : "?";
-    const parts = [`${date}:`];
-
-    // Key indicators (show what's available)
-    const fields: [string, string | undefined][] = [
-      ["Airline Traffic", r.u_s_airline_traffic_total_non_seasonally_adjusted],
-      ["On-Time %", r.u_s_marketing_air_carriers_on_time_performance_percent],
-      ["Transit Ridership", r.system_use_transit_ridership],
-      ["TSI-Freight", r.transportation_services_index_freight],
-      ["TSI-Passenger", r.transportation_services_index_passenger],
-      ["Truck Tonnage", r.truck_tonnage_index],
-      ["Gas Price", r.highway_fuel_prices_regular],
-      ["Auto Sales (SAAR M)", r.auto_sales_saar_millions],
-      ["Amtrak On-Time", r.amtrak_on_time_performance],
-      ["Rail Fatalities", r.rail_fatalities],
-      ["MX Trucks", r.u_s_mexico_incoming_truck_crossings],
-      ["CA Trucks", r.u_s_canada_incoming_truck_crossings],
-    ];
-
-    const available = fields.filter(([, v]) => v && v !== "");
-    available.forEach(([label, val]) => parts.push(`  ${label}: ${formatNum(val)}`));
-
-    return parts.join("\n");
-  });
-
-  return `${records.length} month(s) of transportation data:\n\n${lines.join("\n\n")}`;
-}
 
 // ─── Tools ───────────────────────────────────────────────────────────
 
@@ -104,7 +65,8 @@ export const tools: Tool<any, any>[] = [
         endDate: args.end_date,
         limit: args.limit,
       });
-      return { content: [{ type: "text" as const, text: summarizeTransportStats(data) }] };
+      if (!data.length) return emptyResponse("No transportation statistics found for the given criteria.");
+      return tableResponse(`${data.length} month(s) of transportation data`, { rows: data as Record<string, unknown>[], total: data.length });
     },
   },
 
@@ -129,11 +91,8 @@ export const tools: Tool<any, any>[] = [
         measure: args.measure,
         limit: args.limit,
       });
-      if (!data.length) return { content: [{ type: "text" as const, text: "No border crossing data found." }] };
-      const lines = data.map((r) =>
-        `${r.port_name ?? "?"} (${r.state ?? "?"}) — ${r.border ?? "?"}\n  ${r.measure ?? "?"}: ${formatNum(r.value)} (${r.date?.split("T")[0] ?? "?"})`,
-      );
-      return { content: [{ type: "text" as const, text: `${data.length} record(s):\n\n${lines.join("\n\n")}` }] };
+      if (!data.length) return emptyResponse("No border crossing data found.");
+      return tableResponse(`${data.length} border crossing record(s)`, { rows: data as Record<string, unknown>[], total: data.length });
     },
   },
 ];

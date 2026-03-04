@@ -16,6 +16,7 @@ import {
   type HousingAssistanceRecord,
   type PublicAssistanceRecord,
 } from "../sdk/fema.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -28,36 +29,6 @@ export const workflow =
 export const tips =
   "State codes are two-letter uppercase (TX, FL, CA). Incident types include Hurricane, Flood, Fire, Severe Storm(s), Tornado, Earthquake, Snow, Biological. Declaration types: DR (Major Disaster), EM (Emergency), FM (Fire Management). Use fema_query with dataset 'nfip_claims' to analyze flood insurance data.";
 export const reference = { datasets: DATASETS };
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function summarizeDisasters(data: DisasterDeclaration[]): string {
-  if (!data.length) return "No disaster declarations found.";
-  const lines = data.map((d) => {
-    const date = d.declarationDate ? d.declarationDate.slice(0, 10) : "unknown date";
-    return `[${d.disasterNumber ?? "?"}] ${date} — ${d.disasterName ?? "Unnamed"} (${d.incidentType ?? "?"}) — ${d.state ?? "?"}, ${d.designatedArea ?? ""} [${d.declarationType ?? "?"}]`;
-  });
-  return `${data.length} disaster declaration(s):\n${lines.join("\n")}`;
-}
-
-function summarizeHousing(data: HousingAssistanceRecord[]): string {
-  if (!data.length) return "No housing assistance records found.";
-  const lines = data.map((d) => {
-    const loc = [d.county, d.state, d.zipCode].filter(Boolean).join(", ");
-    const amt = d.totalApprovedIhpAmount != null ? `$${d.totalApprovedIhpAmount.toLocaleString()}` : "N/A";
-    return `Disaster ${d.disasterNumber ?? "?"} — ${loc} — Total IHP: ${amt}, Registrations: ${d.validRegistrations ?? "?"}, Inspected: ${d.totalInspected ?? "?"}`;
-  });
-  return `${data.length} housing assistance record(s):\n${lines.join("\n")}`;
-}
-
-function summarizePA(data: PublicAssistanceRecord[]): string {
-  if (!data.length) return "No public assistance records found.";
-  const lines = data.map((d) => {
-    const amt = d.federalShareObligated != null ? `$${d.federalShareObligated.toLocaleString()}` : "N/A";
-    return `Disaster ${d.disasterNumber ?? "?"} — ${d.applicantName ?? "?"} (${d.state ?? "?"}) — ${d.damageCategory ?? "?"}: Federal Share ${amt}`;
-  });
-  return `${data.length} public assistance record(s):\n${lines.join("\n")}`;
-}
 
 // ─── Tools ───────────────────────────────────────────────────────────
 
@@ -84,7 +55,8 @@ export const tools: Tool<any, any>[] = [
         top: args.top,
         skip: args.skip,
       });
-      return { content: [{ type: "text" as const, text: summarizeDisasters(data) }] };
+      if (!data.length) return emptyResponse("No disaster declarations found.");
+      return tableResponse(`${data.length} disaster declaration(s)`, { rows: data as Record<string, unknown>[], total: data.length });
     },
   },
   {
@@ -107,7 +79,8 @@ export const tools: Tool<any, any>[] = [
         top: args.top,
         skip: args.skip,
       });
-      return { content: [{ type: "text" as const, text: summarizeHousing(data) }] };
+      if (!data.length) return emptyResponse("No housing assistance records found.");
+      return tableResponse(`${data.length} housing assistance record(s)`, { rows: data as Record<string, unknown>[], total: data.length });
     },
   },
   {
@@ -128,7 +101,8 @@ export const tools: Tool<any, any>[] = [
         top: args.top,
         skip: args.skip,
       });
-      return { content: [{ type: "text" as const, text: summarizePA(data) }] };
+      if (!data.length) return emptyResponse("No public assistance records found.");
+      return tableResponse(`${data.length} public assistance record(s)`, { rows: data as Record<string, unknown>[], total: data.length });
     },
   },
   {
@@ -138,9 +112,8 @@ export const tools: Tool<any, any>[] = [
     parameters: z.object({}),
     execute: async () => {
       const data = await getFemaRegions();
-      if (!data.length) return { content: [{ type: "text" as const, text: "No FEMA region data found." }] };
-      const lines = data.map((r) => `Region ${r.regionNumber}: ${r.regionName ?? ""} — ${r.states ?? ""}`);
-      return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+      if (!data.length) return emptyResponse("No FEMA region data found.");
+      return listResponse(`${data.length} FEMA region(s)`, { items: data as Record<string, unknown>[], total: data.length });
     },
   },
   {
@@ -169,12 +142,8 @@ export const tools: Tool<any, any>[] = [
         top: args.top,
         skip: args.skip,
       });
-      if (!data.length) return { content: [{ type: "text" as const, text: "No records found for the given query." }] };
-      const preview = data.slice(0, 10);
-      const text =
-        `${data.length} record(s) returned${data.length > 10 ? " (showing first 10)" : ""}:\n` +
-        preview.map((r, i) => `[${i + 1}] ${JSON.stringify(r)}`).join("\n");
-      return { content: [{ type: "text" as const, text }] };
+      if (!data.length) return emptyResponse("No records found for the given query.");
+      return tableResponse(`${data.length} FEMA record(s)`, { rows: data as Record<string, unknown>[], total: data.length });
     },
   },
 ];

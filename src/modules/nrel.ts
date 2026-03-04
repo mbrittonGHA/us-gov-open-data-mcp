@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Tool } from "fastmcp";
 import { keysEnum, describeEnum } from "../enum-utils.js";
 import { searchAltFuelStations, getUtilityRates, getSolarResource, FUEL_TYPES, STATUS_CODES } from "../sdk/nrel.js";
+import { tableResponse, recordResponse, emptyResponse } from "../response.js";
 
 export const name = "nrel";
 export const displayName = "NREL (Clean Energy)";
@@ -42,16 +43,18 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, zip, fuel_type, radius, limit, status }) => {
       const data = await searchAltFuelStations({ state, zip, fuel_type, limit, radius, status });
-      if (!data.fuel_stations?.length) return `No ${fuel_type || "alt fuel"} stations found${state ? ` in ${state}` : ""}.`;
-      return JSON.stringify({
-        summary: `Alt fuel stations: ${data.total_results} total${state ? ` in ${state}` : ""}${fuel_type ? ` (${fuel_type})` : ""}, showing ${data.fuel_stations.length}`,
-        total: data.total_results,
-        stations: data.fuel_stations.slice(0, 50).map((s: any) => ({
-          name: s.station_name, address: s.street_address, city: s.city, state: s.state, zip: s.zip,
-          fuelType: s.fuel_type_code, network: s.ev_network, status: s.status_code,
-          evLevel2: s.ev_level2_evse_num, evDCFast: s.ev_dc_fast_num, accessCode: s.access_code,
-        })),
-      });
+      if (!data.fuel_stations?.length) return emptyResponse(`No ${fuel_type || "alt fuel"} stations found${state ? ` in ${state}` : ""}.`);
+      return tableResponse(
+        `Alt fuel stations: ${data.total_results} total${state ? ` in ${state}` : ""}${fuel_type ? ` (${fuel_type})` : ""}, showing ${Math.min(data.fuel_stations.length, 50)}`,
+        {
+          rows: data.fuel_stations.map((s: any) => ({
+            name: s.station_name, address: s.street_address, city: s.city, state: s.state, zip: s.zip,
+            fuelType: s.fuel_type_code, network: s.ev_network, status: s.status_code,
+            evLevel2: s.ev_level2_evse_num, evDCFast: s.ev_dc_fast_num, accessCode: s.access_code,
+          })),
+          total: data.total_results,
+        },
+      );
     },
   },
 
@@ -65,10 +68,10 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ lat, lon }) => {
       const data = await getUtilityRates(lat, lon);
-      return JSON.stringify({
-        summary: `Utility rates for ${data.outputs.utility_name}: residential $${data.outputs.residential}/kWh, commercial $${data.outputs.commercial}/kWh, industrial $${data.outputs.industrial}/kWh`,
-        ...data.outputs,
-      });
+      return recordResponse(
+        `Utility rates for ${data.outputs.utility_name}: residential $${data.outputs.residential}/kWh, commercial $${data.outputs.commercial}/kWh, industrial $${data.outputs.industrial}/kWh`,
+        data.outputs,
+      );
     },
   },
 
@@ -82,12 +85,14 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ lat, lon }) => {
       const data = await getSolarResource(lat, lon);
-      return JSON.stringify({
-        summary: `Solar resource at ${lat}, ${lon}: avg GHI ${data.outputs.avg_ghi?.annual} kWh/m²/day, avg DNI ${data.outputs.avg_dni?.annual} kWh/m²/day`,
-        globalHorizontalIrradiance: data.outputs.avg_ghi,
-        directNormalIrradiance: data.outputs.avg_dni,
-        tiltedAtLatitude: data.outputs.avg_lat_tilt,
-      });
+      return recordResponse(
+        `Solar resource at ${lat}, ${lon}: avg GHI ${data.outputs.avg_ghi?.annual} kWh/m²/day, avg DNI ${data.outputs.avg_dni?.annual} kWh/m²/day`,
+        {
+          globalHorizontalIrradiance: data.outputs.avg_ghi,
+          directNormalIrradiance: data.outputs.avg_dni,
+          tiltedAtLatitude: data.outputs.avg_lat_tilt,
+        },
+      );
     },
   },
 ];

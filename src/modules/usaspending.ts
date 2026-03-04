@@ -17,6 +17,7 @@ import {
   awardTypes,
   agencyCodes,
 } from "../sdk/usaspending.js";
+import { tableResponse, timeseriesResponse, listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -63,13 +64,11 @@ export const tools: Tool<any, any>[] = [
         minAmount: min_amount, maxAmount: max_amount,
         limit, page, sortField: sort_field,
       });
-      if (!data.awards.length) return JSON.stringify({ summary: "No awards found matching the criteria.", total: 0, awards: [] });
-      return JSON.stringify({
-        summary: `USAspending award search: ${data.total} total results, showing ${data.awards.length}`,
-        totalResults: data.total,
-        showing: data.awards.length,
-        awards: data.awards,
-      });
+      if (!data.awards.length) return emptyResponse("No awards found matching the criteria.");
+      return listResponse(
+        `USAspending award search: ${data.total} total results, showing ${data.awards.length}`,
+        { items: data.awards, total: data.total },
+      );
     },
   },
 
@@ -89,12 +88,11 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ fiscal_year, state, keyword, award_type, limit }) => {
       const fy = fiscal_year || currentFiscalYear();
       const agencies = await spendingByAgency({ fiscalYear: fy, state, keyword, awardType: award_type, limit });
-      if (!agencies.length) return JSON.stringify({ summary: `No spending data found for FY ${fy}.`, fiscalYear: fy, agencies: [] });
-      return JSON.stringify({
-        summary: `Federal spending by agency FY ${fy}: ${agencies.length} agencies`,
-        fiscalYear: fy,
-        agencies,
-      });
+      if (!agencies.length) return emptyResponse(`No spending data found for FY ${fy}.`);
+      return tableResponse(
+        `Federal spending by agency FY ${fy}: ${agencies.length} agencies`,
+        { rows: agencies, meta: { fiscalYear: fy } },
+      );
     },
   },
 
@@ -112,18 +110,17 @@ export const tools: Tool<any, any>[] = [
 
       if ("detail" in result) {
         const d = result.detail;
-        return JSON.stringify({
-          summary: `Federal spending: ${d.name || state} — $${d.totalAwards.toLocaleString()} total, $${d.perCapita.toLocaleString()} per capita`,
-          ...d,
-        });
+        return recordResponse(
+          `Federal spending: ${d.name || state} — $${d.totalAwards.toLocaleString()} total, $${d.perCapita.toLocaleString()} per capita`,
+          d,
+        );
       }
 
       const fy = fiscal_year || currentFiscalYear();
-      return JSON.stringify({
-        summary: `Federal spending by state FY ${fy}: ${result.states.length} states`,
-        fiscalYear: fy,
-        states: result.states,
-      });
+      return tableResponse(
+        `Federal spending by state FY ${fy}: ${result.states.length} states`,
+        { rows: result.states, meta: { fiscalYear: fy } },
+      );
     },
   },
 
@@ -144,13 +141,11 @@ export const tools: Tool<any, any>[] = [
       const fy = fiscal_year || currentFiscalYear();
       const recipients = await topRecipients({ fiscalYear: fy, awardType: award_type, state, agency, limit });
       const typeLabel = award_type ? ` (${award_type})` : "";
-      if (!recipients.length) return JSON.stringify({ summary: `No recipient data for FY ${fy}${typeLabel}.`, fiscalYear: fy, recipients: [] });
-      return JSON.stringify({
-        summary: `Top federal spending recipients${typeLabel} FY ${fy}: ${recipients.length} recipients`,
-        fiscalYear: fy,
-        awardType: award_type || null,
-        recipients,
-      });
+      if (!recipients.length) return emptyResponse(`No recipient data for FY ${fy}${typeLabel}.`);
+      return tableResponse(
+        `Top federal spending recipients${typeLabel} FY ${fy}: ${recipients.length} recipients`,
+        { rows: recipients, meta: { fiscalYear: fy, awardType: award_type || null } },
+      );
     },
   },
 
@@ -174,12 +169,11 @@ export const tools: Tool<any, any>[] = [
         group, startDate: start_date, endDate: end_date,
         agency, awardType: award_type, state, keyword,
       });
-      if (!periods.length) return JSON.stringify({ summary: "No spending data found for the given period.", periods: [] });
-      return JSON.stringify({
-        summary: `Federal spending over time: ${periods.length} periods, grouped by ${group || "month"}`,
-        group: group || "month",
-        periods,
-      });
+      if (!periods.length) return emptyResponse("No spending data found for the given period.");
+      return timeseriesResponse(
+        `Federal spending over time: ${periods.length} periods, grouped by ${group || "month"}`,
+        { rows: periods, dateKey: "time_period", valueKey: "aggregated_amount", meta: { group: group || "month" } },
+      );
     },
   },
 
@@ -199,10 +193,10 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ agency_code, fiscal_year }) => {
       const data = await agencyOverview(agency_code, fiscal_year);
-      return JSON.stringify({
-        summary: `Agency: ${data.name || agency_code} — FY ${data.fiscalYear}`,
-        ...data,
-      });
+      return recordResponse(
+        `Agency: ${data.name || agency_code} — FY ${data.fiscalYear}`,
+        data,
+      );
     },
   },
 ];

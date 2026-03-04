@@ -15,6 +15,7 @@ import {
   xbrlConcepts,
   type SecFiling,
 } from "../sdk/sec.js";
+import { tableResponse, listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -85,23 +86,25 @@ export const tools: Tool<any, any>[] = [
         });
       }
 
-      return JSON.stringify({
-        summary: `SEC EDGAR: ${res.name || "Unknown"} (CIK ${res.cik}) — ${res.tickers?.join(", ") || "no tickers"}`,
-        company: {
-          cik: res.cik,
-          name: res.name,
-          tickers: res.tickers || [],
-          exchanges: res.exchanges || [],
-          sic: res.sic,
-          sicDescription: res.sicDescription,
-          stateOfIncorporation: res.stateOfIncorporation,
-          entityType: res.entityType,
-          category: res.category,
-          fiscalYearEnd: res.fiscalYearEnd,
-          formerNames: res.formerNames || [],
+      return recordResponse(
+        `SEC EDGAR: ${res.name || "Unknown"} (CIK ${res.cik}) — ${res.tickers?.join(", ") || "no tickers"}`,
+        {
+          company: {
+            cik: res.cik,
+            name: res.name,
+            tickers: res.tickers || [],
+            exchanges: res.exchanges || [],
+            sic: res.sic,
+            sicDescription: res.sicDescription,
+            stateOfIncorporation: res.stateOfIncorporation,
+            entityType: res.entityType,
+            category: res.category,
+            fiscalYearEnd: res.fiscalYearEnd,
+            formerNames: res.formerNames || [],
+          },
+          recentFilings: majorFilings,
         },
-        recentFilings: majorFilings,
-      });
+      );
     },
   },
 
@@ -126,7 +129,7 @@ export const tools: Tool<any, any>[] = [
       const usgaap = facts.facts["us-gaap"];
 
       if (!usgaap) {
-        return JSON.stringify({ summary: `No US-GAAP financial data found for CIK ${cik}.`, data: null });
+        return emptyResponse(`No US-GAAP financial data found for CIK ${cik}.`);
       }
 
       // Specific metric requested
@@ -134,29 +137,31 @@ export const tools: Tool<any, any>[] = [
         const data = extractConceptData(facts, metric);
         if (!data) {
           const available = Object.keys(usgaap).slice(0, 30);
-          return JSON.stringify({
-            summary: `Metric "${metric}" not found for ${facts.entityName}. Showing first 30 available metrics.`,
-            availableMetrics: available,
-          });
+          return listResponse(
+            `Metric "${metric}" not found for ${facts.entityName}. Showing first 30 available metrics.`,
+            { items: available.map(m => ({ metric: m })) },
+          );
         }
-        return JSON.stringify({
-          summary: `${facts.entityName} — ${data.concept} (${data.label}): ${data.annual.length} annual + ${data.quarterly.length} quarterly observations`,
-          entityName: facts.entityName,
-          concept: data.concept,
-          label: data.label,
-          description: data.description,
-          unit: data.unit,
-          annual: data.annual.map(d => ({ period: d.end, value: d.val, filed: d.filed })),
-          quarterly: data.quarterly.map(d => ({ period: d.end, value: d.val, filed: d.filed })),
-        });
+        return recordResponse(
+          `${facts.entityName} — ${data.concept} (${data.label}): ${data.annual.length} annual + ${data.quarterly.length} quarterly observations`,
+          {
+            entityName: facts.entityName,
+            concept: data.concept,
+            label: data.label,
+            description: data.description,
+            unit: data.unit,
+            annual: data.annual.map(d => ({ period: d.end, value: d.val, filed: d.filed })),
+            quarterly: data.quarterly.map(d => ({ period: d.end, value: d.val, filed: d.filed })),
+          },
+        );
       }
 
       // Summary of key metrics
       const summary = summarizeFinancials(facts);
-      return JSON.stringify({
-        summary: `SEC Financial Facts: ${summary.entityName} — ${summary.keyMetrics.length} key metrics found (${summary.totalMetrics} total available)`,
-        ...summary,
-      });
+      return recordResponse(
+        `SEC Financial Facts: ${summary.entityName} — ${summary.keyMetrics.length} key metrics found (${summary.totalMetrics} total available)`,
+        summary,
+      );
     },
   },
 
@@ -182,21 +187,20 @@ export const tools: Tool<any, any>[] = [
       });
 
       if (result.hits.length === 0) {
-        return JSON.stringify({ summary: `No filings found for "${query}".`, total: 0, filings: [] });
+        return emptyResponse(`No filings found for "${query}".`);
       }
 
-      const filings = result.hits.slice(0, 20).map(hit => ({
+      const filings = result.hits.map(hit => ({
         company: hit.names[0] || "?",
         form: hit.form,
         date: hit.date,
         description: hit.description,
       }));
 
-      return JSON.stringify({
-        summary: `SEC filing search "${query}": ${result.total} results, showing ${filings.length}`,
-        total: result.total,
-        filings,
-      });
+      return listResponse(
+        `SEC filing search "${query}": ${result.total} results, showing ${filings.length}`,
+        { items: filings, total: result.total },
+      );
     },
   },
 ];

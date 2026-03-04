@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { Tool, InputPrompt } from "fastmcp";
 import { queryStats, getCropProduction, getLivestockData, getPriceReceived, getParamValues, getCount } from "../sdk/usda-nass.js";
+import { tableResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -50,15 +51,17 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ commodity, state, year, category }) => {
       const data = await getCropProduction(commodity, { state, year, category });
-      if (!data.length) return `No crop data found for ${commodity}${state ? ` in ${state}` : ""}.`;
-      const recent = data.slice(0, 50);
-      return JSON.stringify({
-        summary: `${commodity.toUpperCase()} ${category ?? "PRODUCTION"}: ${recent.length} records${state ? ` for ${state}` : " (national)"}`,
-        records: recent.map(r => ({
-          year: r.year, state: r.state_alpha, value: r.Value, unit: r.unit_desc,
-          description: r.short_desc, period: r.reference_period_desc,
-        })),
-      });
+      if (!data.length) return emptyResponse(`No crop data found for ${commodity}${state ? ` in ${state}` : ""}.`);
+      return tableResponse(
+        `${commodity.toUpperCase()} ${category ?? "PRODUCTION"}: ${data.length} records${state ? ` for ${state}` : " (national)"}`,
+        {
+          rows: data.map(r => ({
+            year: r.year, state: r.state_alpha, value: r.Value, unit: r.unit_desc,
+            description: r.short_desc, period: r.reference_period_desc,
+          })),
+          total: data.length,
+        },
+      );
     },
   },
 
@@ -74,15 +77,17 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ commodity, state, year, category }) => {
       const data = await getLivestockData(commodity, { state, year, category });
-      if (!data.length) return `No livestock data for ${commodity}${state ? ` in ${state}` : ""}.`;
-      const recent = data.slice(0, 50);
-      return JSON.stringify({
-        summary: `${commodity.toUpperCase()}: ${recent.length} records${state ? ` for ${state}` : " (national)"}`,
-        records: recent.map(r => ({
-          year: r.year, state: r.state_alpha, value: r.Value, unit: r.unit_desc,
-          description: r.short_desc, period: r.reference_period_desc,
-        })),
-      });
+      if (!data.length) return emptyResponse(`No livestock data for ${commodity}${state ? ` in ${state}` : ""}.`);
+      return tableResponse(
+        `${commodity.toUpperCase()}: ${data.length} records${state ? ` for ${state}` : " (national)"}`,
+        {
+          rows: data.map(r => ({
+            year: r.year, state: r.state_alpha, value: r.Value, unit: r.unit_desc,
+            description: r.short_desc, period: r.reference_period_desc,
+          })),
+          total: data.length,
+        },
+      );
     },
   },
 
@@ -97,15 +102,17 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ commodity, state, year }) => {
       const data = await getPriceReceived(commodity, { state, year });
-      if (!data.length) return `No price data for ${commodity}${state ? ` in ${state}` : ""}.`;
-      const recent = data.slice(0, 50);
-      return JSON.stringify({
-        summary: `${commodity.toUpperCase()} prices: ${recent.length} records${state ? ` for ${state}` : " (national)"}`,
-        records: recent.map(r => ({
-          year: r.year, state: r.state_alpha, value: r.Value, unit: r.unit_desc,
-          description: r.short_desc, period: r.reference_period_desc,
-        })),
-      });
+      if (!data.length) return emptyResponse(`No price data for ${commodity}${state ? ` in ${state}` : ""}.`);
+      return tableResponse(
+        `${commodity.toUpperCase()} prices: ${data.length} records${state ? ` for ${state}` : " (national)"}`,
+        {
+          rows: data.map(r => ({
+            year: r.year, state: r.state_alpha, value: r.Value, unit: r.unit_desc,
+            description: r.short_desc, period: r.reference_period_desc,
+          })),
+          total: data.length,
+        },
+      );
     },
   },
 
@@ -125,17 +132,18 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (params) => {
       const data = await queryStats(params);
-      if (!data.length) return "No records found for this query.";
-      const recent = data.slice(0, 100);
-      return JSON.stringify({
-        summary: `${data.length} records returned (showing ${recent.length})`,
-        totalRecords: data.length,
-        records: recent.map(r => ({
-          year: r.year, state: r.state_alpha, commodity: r.commodity_desc,
-          category: r.statisticcat_desc, value: r.Value, unit: r.unit_desc,
-          description: r.short_desc,
-        })),
-      });
+      if (!data.length) return emptyResponse("No records found for this query.");
+      return tableResponse(
+        `${data.length} records returned`,
+        {
+          rows: data.map(r => ({
+            year: r.year, state: r.state_alpha, commodity: r.commodity_desc,
+            category: r.statisticcat_desc, value: r.Value, unit: r.unit_desc,
+            description: r.short_desc,
+          })),
+          total: data.length,
+        },
+      );
     },
   },
 ];

@@ -17,6 +17,7 @@ import {
   type FecCommittee,
   type FecFinancialTotals,
 } from "../sdk/fec.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -128,12 +129,11 @@ export const tools: Tool<any, any>[] = [
       });
       const results = data.results ?? [];
       const pag = data.pagination ?? { page: 1, pages: 0, count: 0, per_page: 20 };
-      if (!results.length) return JSON.stringify({ summary: "No candidates found.", pagination: pag, candidates: [] });
-      return JSON.stringify({
-        summary: `Candidate search: page ${pag.page} of ${pag.pages} (${pag.count} total)`,
-        pagination: pag,
-        candidates: results.map(summarizeCandidate),
-      });
+      if (!results.length) return emptyResponse("No candidates found.");
+      return listResponse(
+        `Candidate search: page ${pag.page} of ${pag.pages} (${pag.count} total)`,
+        { items: results.map(summarizeCandidate), total: pag.count, meta: { pagination: pag } },
+      );
     },
   },
 
@@ -163,12 +163,11 @@ export const tools: Tool<any, any>[] = [
       });
       const results = data.results ?? [];
       const pag = data.pagination ?? { page: 1, pages: 0, count: 0, per_page: 20 };
-      if (!results.length) return JSON.stringify({ summary: "No committees found.", pagination: pag, committees: [] });
-      return JSON.stringify({
-        summary: `Committee search: page ${pag.page} of ${pag.pages} (${pag.count} total)`,
-        pagination: pag,
-        committees: results.map(summarizeCommittee),
-      });
+      if (!results.length) return emptyResponse("No committees found.");
+      return listResponse(
+        `Committee search: page ${pag.page} of ${pag.pages} (${pag.count} total)`,
+        { items: results.map(summarizeCommittee), total: pag.count, meta: { pagination: pag } },
+      );
     },
   },
 
@@ -184,13 +183,12 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ candidate_id, cycle }) => {
       const results = await getCandidateFinancials(candidate_id, cycle);
-      if (!results.length) return JSON.stringify({ summary: `No financial data for candidate ${candidate_id}.`, candidateId: candidate_id, cycles: [] });
+      if (!results.length) return emptyResponse(`No financial data for candidate ${candidate_id}.`);
       const latest = results[0];
-      return JSON.stringify({
-        summary: `${candidate_id}: ${results.length} cycle(s), latest receipts ${fmtUsd(latest.receipts ?? 0)}`,
-        candidateId: candidate_id,
-        cycles: results.map(summarizeFinancials),
-      });
+      return tableResponse(
+        `${candidate_id}: ${results.length} cycle(s), latest receipts ${fmtUsd(latest.receipts ?? 0)}`,
+        { rows: results.map(summarizeFinancials), meta: { candidateId: candidate_id } },
+      );
     },
   },
 
@@ -206,13 +204,12 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ committee_id, cycle }) => {
       const results = await getCommitteeFinancials(committee_id, cycle);
-      if (!results.length) return JSON.stringify({ summary: `No financial data for committee ${committee_id}.`, committeeId: committee_id, cycles: [] });
+      if (!results.length) return emptyResponse(`No financial data for committee ${committee_id}.`);
       const latest = results[0];
-      return JSON.stringify({
-        summary: `${committee_id}: ${results.length} cycle(s), latest receipts ${fmtUsd(latest.receipts ?? 0)}`,
-        committeeId: committee_id,
-        cycles: results.map(summarizeFinancials),
-      });
+      return tableResponse(
+        `${committee_id}: ${results.length} cycle(s), latest receipts ${fmtUsd(latest.receipts ?? 0)}`,
+        { rows: results.map(summarizeFinancials), meta: { committeeId: committee_id } },
+      );
     },
   },
 
@@ -231,22 +228,22 @@ export const tools: Tool<any, any>[] = [
       const officeNames: Record<string, string> = { H: "House", S: "Senate", P: "President" };
       const data = await getTopCandidates({ office, election_year, state, per_page });
       const results = data.results ?? [];
-      if (!results.length) return JSON.stringify({ summary: "No results found.", office: officeNames[office] ?? office, electionYear: election_year, candidates: [] });
-      return JSON.stringify({
-        summary: `Top ${officeNames[office] ?? office} candidates by fundraising (${election_year}): ${results.length} results${state ? `, state: ${state}` : ""}`,
-        office: officeNames[office] ?? office,
-        electionYear: election_year,
-        state: state ?? null,
-        candidates: results.map(c => ({
-          name: c.name ?? null,
-          candidateId: c.candidate_id ?? null,
-          party: c.party_full ?? c.party ?? null,
-          state: c.state ?? null,
-          receipts: c.receipts ?? 0,
-          disbursements: c.disbursements ?? 0,
-          cashOnHand: c.cash_on_hand_end_period ?? 0,
-        })),
-      });
+      if (!results.length) return emptyResponse(`No results found for ${officeNames[office] ?? office} ${election_year}.`);
+      return tableResponse(
+        `Top ${officeNames[office] ?? office} candidates by fundraising (${election_year}): ${results.length} results${state ? `, state: ${state}` : ""}`,
+        {
+          rows: results.map(c => ({
+            name: c.name ?? null,
+            candidateId: c.candidate_id ?? null,
+            party: c.party_full ?? c.party ?? null,
+            state: c.state ?? null,
+            receipts: c.receipts ?? 0,
+            disbursements: c.disbursements ?? 0,
+            cashOnHand: c.cash_on_hand_end_period ?? 0,
+          })),
+          meta: { office: officeNames[office] ?? office, electionYear: election_year },
+        },
+      );
     },
   },
 
@@ -269,24 +266,25 @@ export const tools: Tool<any, any>[] = [
     execute: async ({ committee_id, cycle, recipient_name, per_page }) => {
       const data = await getCommitteeDisbursements({ committee_id, cycle, recipient_name, per_page });
       const results = data.results ?? [];
-      if (!results.length) return `No disbursements found for committee ${committee_id}.`;
+      if (!results.length) return emptyResponse(`No disbursements found for committee ${committee_id}.`);
 
-      return JSON.stringify({
-        summary: `Disbursements from ${results[0]?.committee?.name ?? committee_id}: ${data.pagination.count} total, showing ${results.length}`,
-        totalDisbursements: data.pagination.count,
-        committeeId: committee_id,
-        committeeName: results[0]?.committee?.name ?? null,
-        disbursements: results.map(d => ({
-          recipient: d.recipient_name,
-          recipientCommittee: d.recipient_committee?.name ?? null,
-          recipientParty: d.recipient_committee?.party ?? null,
-          amount: d.disbursement_amount,
-          date: d.disbursement_date,
-          description: d.disbursement_description,
-          recipientState: d.recipient_state,
-          memo: d.memo_text,
-        })),
-      });
+      return tableResponse(
+        `Disbursements from ${results[0]?.committee?.name ?? committee_id}: ${data.pagination.count} total, showing ${results.length}`,
+        {
+          rows: results.map(d => ({
+            recipient: d.recipient_name,
+            recipientCommittee: d.recipient_committee?.name ?? null,
+            recipientParty: d.recipient_committee?.party ?? null,
+            amount: d.disbursement_amount,
+            date: d.disbursement_date,
+            description: d.disbursement_description,
+            recipientState: d.recipient_state,
+            memo: d.memo_text,
+          })),
+          total: data.pagination.count,
+          meta: { committeeId: committee_id, committeeName: results[0]?.committee?.name ?? null },
+        },
+      );
     },
   },
 ];

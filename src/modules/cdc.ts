@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { Tool, InputPrompt } from "fastmcp";
 import { getLeadingCausesOfDeath, getLifeExpectancy, getMortalityRates, getPlacesHealth, getPlacesCityHealth, getCovidData, getWeeklyDeaths, getDisabilityData, getDrugOverdoseData, getNutritionObesityData, getHistoricalDeathRates, getBirthIndicators, queryDataset, DATASETS } from "../sdk/cdc.js";
+import { tableResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -42,11 +43,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, year, limit }) => {
       const data = await getLeadingCausesOfDeath({ state, year, limit });
-      if (!data.length) return `No death data found${state ? ` for ${state}` : ""}${year ? ` in ${year}` : ""}.`;
-      return JSON.stringify({
-        summary: `Leading causes of death: ${data.length} records${state ? ` for ${state}` : ""}${year ? ` (${year})` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse(`No death data found${state ? ` for ${state}` : ""}${year ? ` in ${year}` : ""}.`);
+      return tableResponse(
+        `Leading causes of death: ${data.length} records${state ? ` for ${state}` : ""}${year ? ` (${year})` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -62,11 +63,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ year, race, sex, limit }) => {
       const data = await getLifeExpectancy({ year, race, sex, limit });
-      if (!data.length) return "No life expectancy data found.";
-      return JSON.stringify({
-        summary: `Life expectancy: ${data.length} records${year ? ` (${year})` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse("No life expectancy data found.");
+      return tableResponse(
+        `Life expectancy: ${data.length} records${year ? ` (${year})` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -82,11 +83,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ quarter, cause, rate_type, limit }) => {
       const data = await getMortalityRates({ quarter, cause, rateType: rate_type, limit });
-      if (!data.length) return "No mortality rate data found.";
-      return JSON.stringify({
-        summary: `Mortality rates: ${data.length} records${quarter ? ` (${quarter})` : ""}${cause ? ` for ${cause}` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse("No mortality rate data found.");
+      return tableResponse(
+        `Mortality rates: ${data.length} records${quarter ? ` (${quarter})` : ""}${cause ? ` for ${cause}` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -107,11 +108,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, measure, limit }) => {
       const data = await getPlacesHealth({ state, measure, limit });
-      if (!data.length) return `No PLACES health data found${state ? ` for ${state}` : ""}.`;
-      return JSON.stringify({
-        summary: `PLACES county health: ${data.length} records${state ? ` for ${state}` : ""}${measure ? ` (${measure})` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse(`No PLACES health data found${state ? ` for ${state}` : ""}.`);
+      return tableResponse(
+        `PLACES county health: ${data.length} records${state ? ` for ${state}` : ""}${measure ? ` (${measure})` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -128,11 +129,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, city, limit }) => {
       const data = await getPlacesCityHealth({ state, city, limit });
-      if (!data.length) return `No PLACES city health data found${city ? ` for ${city}` : ""}.`;
-      return JSON.stringify({
-        summary: `PLACES city health: ${data.length} cities${state ? ` in ${state}` : ""}${city ? ` matching '${city}'` : ""}`,
-        records: data.slice(0, 50),
-      });
+      if (!data.length) return emptyResponse(`No PLACES city health data found${city ? ` for ${city}` : ""}.`);
+      return tableResponse(
+        `PLACES city health: ${data.length} cities${state ? ` in ${state}` : ""}${city ? ` matching '${city}'` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -149,11 +150,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, year, limit }) => {
       const data = await getWeeklyDeaths({ state, year, limit });
-      if (!data.length) return `No weekly death data found${state ? ` for ${state}` : ""}.`;
-      return JSON.stringify({
-        summary: `Weekly death surveillance: ${data.length} records${state ? ` for ${state}` : ""}${year ? ` (${year})` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse(`No weekly death data found${state ? ` for ${state}` : ""}.`);
+      return tableResponse(
+        `Weekly death surveillance: ${data.length} records${state ? ` for ${state}` : ""}${year ? ` (${year})` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -170,11 +171,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, disability_type, limit }) => {
       const data = await getDisabilityData({ state, disabilityType: disability_type, limit });
-      if (!data.length) return `No disability data found${state ? ` for ${state}` : ""}.`;
-      return JSON.stringify({
-        summary: `Disability prevalence: ${data.length} records${state ? ` for ${state}` : ""}${disability_type ? ` (${disability_type})` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse(`No disability data found${state ? ` for ${state}` : ""}.`);
+      return tableResponse(
+        `Disability prevalence: ${data.length} records${state ? ` for ${state}` : ""}${disability_type ? ` (${disability_type})` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -191,11 +192,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, year, sex, limit }) => {
       const data = await getDrugOverdoseData({ state, year, sex, limit });
-      if (!data.length) return `No drug overdose data found${state ? ` for ${state}` : ""}.`;
-      return JSON.stringify({
-        summary: `Drug overdose mortality: ${data.length} records${state ? ` for ${state}` : ""}${year ? ` (${year})` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse(`No drug overdose data found${state ? ` for ${state}` : ""}.`);
+      return tableResponse(
+        `Drug overdose mortality: ${data.length} records${state ? ` for ${state}` : ""}${year ? ` (${year})` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -211,11 +212,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, topic, limit }) => {
       const data = await getNutritionObesityData({ state, topic, limit });
-      if (!data.length) return `No nutrition/obesity data found${state ? ` for ${state}` : ""}.`;
-      return JSON.stringify({
-        summary: `Nutrition & obesity: ${data.length} records${state ? ` for ${state}` : ""}${topic ? ` (${topic})` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse(`No nutrition/obesity data found${state ? ` for ${state}` : ""}.`);
+      return tableResponse(
+        `Nutrition & obesity: ${data.length} records${state ? ` for ${state}` : ""}${topic ? ` (${topic})` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -233,11 +234,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ cause, start_year, end_year, limit }) => {
       const data = await getHistoricalDeathRates({ cause, startYear: start_year, endYear: end_year, limit });
-      if (!data.length) return "No historical death rate data found.";
-      return JSON.stringify({
-        summary: `Historical death rates: ${data.length} records${cause ? ` for ${cause}` : ""}`,
-        records: data.slice(0, 200),
-      });
+      if (!data.length) return emptyResponse("No historical death rate data found.");
+      return tableResponse(
+        `Historical death rates: ${data.length} records${cause ? ` for ${cause}` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -254,11 +255,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ topic, race_ethnicity, limit }) => {
       const data = await getBirthIndicators({ topic, raceEthnicity: race_ethnicity, limit });
-      if (!data.length) return "No birth indicator data found.";
-      return JSON.stringify({
-        summary: `Birth indicators: ${data.length} records${topic ? ` (${topic})` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse("No birth indicator data found.");
+      return tableResponse(
+        `Birth indicators: ${data.length} records${topic ? ` (${topic})` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -272,11 +273,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ state, limit }) => {
       const data = await getCovidData({ state, limit });
-      if (!data.length) return `No COVID data found${state ? ` for ${state}` : ""}.`;
-      return JSON.stringify({
-        summary: `COVID-19 data: ${data.length} records${state ? ` for ${state}` : ""}`,
-        records: data.slice(0, 100),
-      });
+      if (!data.length) return emptyResponse(`No COVID data found${state ? ` for ${state}` : ""}.`);
+      return tableResponse(
+        `COVID-19 data: ${data.length} records${state ? ` for ${state}` : ""}`,
+        { rows: data },
+      );
     },
   },
 
@@ -294,11 +295,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ dataset_id, where, select, order, group, limit }) => {
       const data = await queryDataset(dataset_id, { where, select, order, group, limit });
-      if (!data.length) return "No records found.";
-      return JSON.stringify({
-        summary: `${data.length} records from dataset ${dataset_id}`,
-        records: data.slice(0, 200),
-      });
+      if (!data.length) return emptyResponse("No records found.");
+      return tableResponse(
+        `${data.length} records from dataset ${dataset_id}`,
+        { rows: data },
+      );
     },
   },
 ];

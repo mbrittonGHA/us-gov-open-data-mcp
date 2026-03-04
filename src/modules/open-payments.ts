@@ -21,6 +21,7 @@ import {
   PAYMENT_TYPES,
   clearCache as sdkClearCache,
 } from "../sdk/open-payments.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -43,14 +44,6 @@ export const reference = {
   },
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function formatDollar(val: string | undefined): string {
-  if (!val) return "$0";
-  const n = Number(val);
-  return isNaN(n) ? val : "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 // ─── Tools ───────────────────────────────────────────────────────────
 
 export const tools: Tool<any, any>[] = [
@@ -71,28 +64,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await searchPayments(args);
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No payments found matching the criteria." }] };
-
-      const lines = data.results.map((r) => {
-        const parts = [
-          `${formatDollar(r.total_amount_of_payment_usdollars)} from ${r.submitting_applicable_manufacturer_or_applicable_gpo_name ?? "?"}`,
-          `  To: Dr. ${r.covered_recipient_first_name ?? ""} ${r.covered_recipient_last_name ?? ""} (${r.covered_recipient_specialty_1 ?? "?"})`,
-          `  Location: ${r.recipient_city ?? "?"}, ${r.recipient_state ?? "?"}`,
-          `  Type: ${r.nature_of_payment_or_transfer_of_value ?? "?"}`,
-        ];
-        if (r.name_of_drug_or_biological_or_device_or_medical_supply_1) {
-          parts.push(`  Product: ${r.name_of_drug_or_biological_or_device_or_medical_supply_1}`);
-        }
-        if (r.date_of_payment) parts.push(`  Date: ${r.date_of_payment}`);
-        return parts.join("\n");
-      });
-
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Open Payments: ${data.count?.toLocaleString() ?? "?"} matching records (showing ${data.results.length}):\n\n${lines.join("\n\n")}`,
-        }],
-      };
+      if (!data.results?.length) return emptyResponse("No payments found matching the criteria.");
+      return tableResponse(
+        `Open Payments: ${data.count?.toLocaleString() ?? "?"} matching records (showing ${data.results.length})`,
+        { rows: data.results as Record<string, unknown>[], total: data.count },
+      );
     },
   },
 
@@ -117,26 +93,11 @@ export const tools: Tool<any, any>[] = [
         sortBy: "total_amount_of_payment_usdollars",
         sortOrder: "desc",
       });
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No payments found." }] };
-
-      const lines = data.results.map((r, i) => {
-        const parts = [
-          `#${i + 1}: ${formatDollar(r.total_amount_of_payment_usdollars)} from ${r.submitting_applicable_manufacturer_or_applicable_gpo_name ?? "?"}`,
-          `  To: Dr. ${r.covered_recipient_first_name ?? ""} ${r.covered_recipient_last_name ?? ""} (${r.covered_recipient_specialty_1 ?? "?"})`,
-          `  Location: ${r.recipient_city ?? "?"}, ${r.recipient_state ?? "?"}`,
-          `  Type: ${r.nature_of_payment_or_transfer_of_value ?? "?"}`,
-        ];
-        if (r.name_of_drug_or_biological_or_device_or_medical_supply_1) parts.push(`  Product: ${r.name_of_drug_or_biological_or_device_or_medical_supply_1}`);
-        if (r.date_of_payment) parts.push(`  Date: ${r.date_of_payment}`);
-        return parts.join("\n");
-      });
-
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Top payments (sorted by amount, ${data.count?.toLocaleString() ?? "?"} total matches):\n\n${lines.join("\n\n")}`,
-        }],
-      };
+      if (!data.results?.length) return emptyResponse("No payments found.");
+      return tableResponse(
+        `Top payments (sorted by amount, ${data.count?.toLocaleString() ?? "?"} total matches)`,
+        { rows: data.results as Record<string, unknown>[], total: data.count },
+      );
     },
   },
 
@@ -156,23 +117,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getTopDoctorTotals(args);
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No grouped payment data found." }] };
-
-      const lines = data.results.map((r: any, i: number) => {
-        const name = `${r.covered_recipient_first_name ?? ""} ${r.covered_recipient_last_name ?? ""}`.trim() || "?";
-        const total = formatDollar(r.total_payments);
-        const count = Number(r.payment_count ?? 0).toLocaleString();
-        const specialty = r.covered_recipient_specialty_1 ?? "?";
-        const location = `${r.recipient_city ?? "?"}, ${r.recipient_state ?? "?"}`;
-        return `#${i + 1}: Dr. ${name} (${specialty})\n  Location: ${location}\n  Total: ${total} across ${count} payments`;
-      });
-
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Top doctors by total payments received:\n\n${lines.join("\n\n")}`,
-        }],
-      };
+      if (!data.results?.length) return emptyResponse("No grouped payment data found.");
+      return tableResponse(
+        `Top doctors by total payments received`,
+        { rows: data.results as Record<string, unknown>[], total: data.count },
+      );
     },
   },
 
@@ -187,18 +136,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getPaymentsByCompany({ limit: args.limit });
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No company data found." }] };
-
-      const lines = data.results.map((r: any) => {
-        return `${r.reporting_entity_name ?? r.submitting_applicable_manufacturer_or_applicable_gpo_name ?? "?"}: ${formatDollar(r.total_payment_amount ?? r.total_amount_of_payment_usdollars)} (${Number(r.number_of_payments ?? 0).toLocaleString()} payments)`;
-      });
-
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Open Payments by company (${data.count?.toLocaleString() ?? "?"} total):\n\n${lines.join("\n")}`,
-        }],
-      };
+      if (!data.results?.length) return emptyResponse("No company data found.");
+      return tableResponse(
+        `Open Payments by company (${data.count?.toLocaleString() ?? "?"} total)`,
+        { rows: data.results as Record<string, unknown>[], total: data.count },
+      );
     },
   },
 
@@ -211,19 +153,11 @@ export const tools: Tool<any, any>[] = [
     parameters: z.object({}),
     execute: async () => {
       const data = await getNationalTotals();
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No summary data found." }] };
-
-      const lines = data.results.map((r: any) => {
-        const fields = Object.entries(r).filter(([, v]) => v).map(([k, v]) => `  ${k}: ${v}`);
-        return fields.join("\n");
-      });
-
-      return {
-        content: [{
-          type: "text" as const,
-          text: `Open Payments National Summary:\n\n${lines.join("\n\n")}`,
-        }],
-      };
+      if (!data.results?.length) return emptyResponse("No summary data found.");
+      return listResponse(
+        `Open Payments National Summary`,
+        { items: data.results as Record<string, unknown>[], total: data.results.length },
+      );
     },
   },
 
@@ -242,18 +176,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await searchResearchPayments(args);
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No research payments found." }] };
-      const lines = data.results.map((r) => {
-        const parts = [
-          `${formatDollar(r.total_amount_of_payment_usdollars)} from ${r.submitting_applicable_manufacturer_or_applicable_gpo_name ?? "?"}`,
-          `  To: Dr. ${r.covered_recipient_first_name ?? ""} ${r.covered_recipient_last_name ?? ""} (${r.covered_recipient_specialty_1 ?? "?"})`,
-          `  Location: ${r.recipient_city ?? "?"}, ${r.recipient_state ?? "?"}`,
-          `  Type: ${r.nature_of_payment_or_transfer_of_value ?? "Research"}`,
-        ];
-        if (r.name_of_drug_or_biological_or_device_or_medical_supply_1) parts.push(`  Product: ${r.name_of_drug_or_biological_or_device_or_medical_supply_1}`);
-        return parts.join("\n");
-      });
-      return { content: [{ type: "text" as const, text: `Research Payments: ${data.count?.toLocaleString() ?? "?"} records (showing ${data.results.length}):\n\n${lines.join("\n\n")}` }] };
+      if (!data.results?.length) return emptyResponse("No research payments found.");
+      return tableResponse(
+        `Research Payments: ${data.count?.toLocaleString() ?? "?"} records (showing ${data.results.length})`,
+        { rows: data.results as Record<string, unknown>[], total: data.count },
+      );
     },
   },
 
@@ -272,16 +199,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await searchOwnershipPayments(args);
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No ownership payments found." }] };
-      const lines = data.results.map((r) => {
-        const parts = [
-          `${formatDollar(r.total_amount_of_payment_usdollars)} from ${r.submitting_applicable_manufacturer_or_applicable_gpo_name ?? "?"}`,
-          `  To: Dr. ${r.covered_recipient_first_name ?? ""} ${r.covered_recipient_last_name ?? ""} (${r.covered_recipient_specialty_1 ?? "?"})`,
-          `  Location: ${r.recipient_city ?? "?"}, ${r.recipient_state ?? "?"}`,
-        ];
-        return parts.join("\n");
-      });
-      return { content: [{ type: "text" as const, text: `Ownership Payments: ${data.count?.toLocaleString() ?? "?"} records (showing ${data.results.length}):\n\n${lines.join("\n\n")}` }] };
+      if (!data.results?.length) return emptyResponse("No ownership payments found.");
+      return tableResponse(
+        `Ownership Payments: ${data.count?.toLocaleString() ?? "?"} records (showing ${data.results.length})`,
+        { rows: data.results as Record<string, unknown>[], total: data.count },
+      );
     },
   },
 
@@ -296,16 +218,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getPaymentsByPhysician({ limit: args.limit });
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No physician data found." }] };
-      const lines = data.results.map((r: any) => {
-        const name = `${r.covered_recipient_first_name ?? ""} ${r.covered_recipient_last_name ?? ""}`.trim() || "?";
-        const total = formatDollar(r.total_payment_amount ?? r.total_amount_of_payment_usdollars);
-        const count = Number(r.number_of_payments ?? r.total_payment_count ?? 0).toLocaleString();
-        const specialty = r.covered_recipient_specialty_1 ?? r.covered_recipient_specialty ?? "?";
-        const state = r.recipient_state ?? "?";
-        return `Dr. ${name} (${specialty}, ${state}): ${total} (${count} payments)`;
-      });
-      return { content: [{ type: "text" as const, text: `Payments by physician (${data.count?.toLocaleString() ?? "?"} total):\n\n${lines.join("\n")}` }] };
+      if (!data.results?.length) return emptyResponse("No physician data found.");
+      return tableResponse(
+        `Payments by physician (${data.count?.toLocaleString() ?? "?"} total)`,
+        { rows: data.results as Record<string, unknown>[], total: data.count },
+      );
     },
   },
 
@@ -320,14 +237,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getPaymentsByTeachingHospital({ limit: args.limit });
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No teaching hospital data found." }] };
-      const lines = data.results.map((r: any) => {
-        const name = r.teaching_hospital_name ?? "?";
-        const total = formatDollar(r.total_payment_amount ?? r.total_amount_of_payment_usdollars);
-        const count = Number(r.number_of_payments ?? r.total_payment_count ?? 0).toLocaleString();
-        return `${name}: ${total} (${count} payments)`;
-      });
-      return { content: [{ type: "text" as const, text: `Payments by teaching hospital (${data.count?.toLocaleString() ?? "?"} total):\n\n${lines.join("\n")}` }] };
+      if (!data.results?.length) return emptyResponse("No teaching hospital data found.");
+      return tableResponse(
+        `Payments by teaching hospital (${data.count?.toLocaleString() ?? "?"} total)`,
+        { rows: data.results as Record<string, unknown>[], total: data.count },
+      );
     },
   },
 
@@ -342,12 +256,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getPaymentsBySpecialty({ limit: args.limit });
-      if (!data.results?.length) return { content: [{ type: "text" as const, text: "No specialty data found." }] };
-      const lines = data.results.map((r: any) => {
-        const fields = Object.entries(r).filter(([, v]) => v).map(([k, v]) => `  ${k}: ${v}`);
-        return fields.join("\n");
-      });
-      return { content: [{ type: "text" as const, text: `Payments by specialty (${data.count?.toLocaleString() ?? "?"} total):\n\n${lines.join("\n\n")}` }] };
+      if (!data.results?.length) return emptyResponse("No specialty data found.");
+      return tableResponse(
+        `Payments by specialty (${data.count?.toLocaleString() ?? "?"} total)`,
+        { rows: data.results as Record<string, unknown>[], total: data.count },
+      );
     },
   },
 ];

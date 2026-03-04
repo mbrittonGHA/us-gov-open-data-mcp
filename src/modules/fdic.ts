@@ -15,6 +15,7 @@ import {
   INSTITUTION_FIELDS,
   FILTER_EXAMPLES,
 } from "../sdk/fdic.js";
+import { tableResponse, emptyResponse } from "../response.js";
 
 export const name = "fdic";
 export const displayName = "FDIC (Federal Deposit Insurance Corporation)";
@@ -60,12 +61,11 @@ export const tools: Tool<any, any>[] = [
       const data = await searchInstitutions(args);
       const total = data.meta?.total ?? 0;
       const records = data.data?.map(d => d.data) ?? [];
-      if (!records.length) return "No institutions found matching the criteria.";
-      return JSON.stringify({
-        summary: `FDIC institutions: ${total.toLocaleString()} total matches, showing ${records.length}`,
-        total,
-        institutions: records.slice(0, 50),
-      });
+      if (!records.length) return emptyResponse("No institutions found matching the criteria.");
+      return tableResponse(
+        `FDIC institutions: ${total.toLocaleString()} total matches, showing ${Math.min(records.length, 50)}`,
+        { rows: records, total },
+      );
     },
   },
 
@@ -87,12 +87,11 @@ export const tools: Tool<any, any>[] = [
       const data = await getBankFailures(args);
       const total = data.meta?.total ?? 0;
       const records = data.data?.map(d => d.data) ?? [];
-      if (!records.length) return "No bank failures found matching the criteria.";
-      return JSON.stringify({
-        summary: `FDIC bank failures: ${total.toLocaleString()} total matches, showing ${records.length}`,
-        total,
-        failures: records.slice(0, 50),
-      });
+      if (!records.length) return emptyResponse("No bank failures found matching the criteria.");
+      return tableResponse(
+        `FDIC bank failures: ${total.toLocaleString()} total matches, showing ${Math.min(records.length, 50)}`,
+        { rows: records, total },
+      );
     },
   },
 
@@ -115,12 +114,11 @@ export const tools: Tool<any, any>[] = [
       const data = await getFinancials(args);
       const total = data.meta?.total ?? 0;
       const records = data.data?.map(d => d.data) ?? [];
-      if (!records.length) return "No financial data found matching the criteria.";
-      return JSON.stringify({
-        summary: `FDIC financial records: ${total.toLocaleString()} total, showing ${records.length}. Dollar values in thousands.`,
-        total,
-        financials: records.slice(0, 50),
-      });
+      if (!records.length) return emptyResponse("No financial data found matching the criteria.");
+      return tableResponse(
+        `FDIC financial records: ${total.toLocaleString()} total, showing ${Math.min(records.length, 50)}. Dollar values in thousands.`,
+        { rows: records, total },
+      );
     },
   },
 
@@ -142,13 +140,11 @@ export const tools: Tool<any, any>[] = [
       const data = await getSummary(args);
       const total = data.meta?.total ?? 0;
       const records = data.data?.map(d => d.data) ?? [];
-      if (!records.length) return "No summary data found matching the criteria.";
-      return JSON.stringify({
-        summary: `FDIC banking summary: ${total.toLocaleString()} records, showing ${records.length}`,
-        total,
-        records: records.slice(0, 50),
-        totals: data.totals,
-      });
+      if (!records.length) return emptyResponse("No summary data found matching the criteria.");
+      return tableResponse(
+        `FDIC banking summary: ${total.toLocaleString()} records, showing ${Math.min(records.length, 50)}`,
+        { rows: records, total, meta: data.totals ? { totals: data.totals } : undefined },
+      );
     },
   },
 
@@ -170,12 +166,11 @@ export const tools: Tool<any, any>[] = [
       const data = await getDeposits(args);
       const total = data.meta?.total ?? 0;
       const records = data.data?.map(d => d.data) ?? [];
-      if (!records.length) return "No deposit data found matching the criteria.";
-      return JSON.stringify({
-        summary: `FDIC branch deposits: ${total.toLocaleString()} total branches, showing ${records.length}`,
-        total,
-        deposits: records.slice(0, 50),
-      });
+      if (!records.length) return emptyResponse("No deposit data found matching the criteria.");
+      return tableResponse(
+        `FDIC branch deposits: ${total.toLocaleString()} total branches, showing ${Math.min(records.length, 50)}`,
+        { rows: records, total },
+      );
     },
   },
 
@@ -196,12 +191,11 @@ export const tools: Tool<any, any>[] = [
       const data = await getHistory(args);
       const total = data.meta?.total ?? 0;
       const records = data.data?.map(d => d.data) ?? [];
-      if (!records.length) return "No history events found matching the criteria.";
-      return JSON.stringify({
-        summary: `FDIC institution history: ${total.toLocaleString()} events, showing ${records.length}`,
-        total,
-        events: records.slice(0, 50),
-      });
+      if (!records.length) return emptyResponse("No history events found matching the criteria.");
+      return tableResponse(
+        `FDIC institution history: ${total.toLocaleString()} events, showing ${Math.min(records.length, 50)}`,
+        { rows: records, total },
+      );
     },
   },
 ];

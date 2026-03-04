@@ -15,6 +15,7 @@ import {
   type Recall,
   type Complaint,
 } from "../sdk/nhtsa.js";
+import { listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -29,43 +30,34 @@ export const tips =
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-function summarizeRecalls(data: Recall[]): string {
-  if (!data.length) return "No recalls found for this vehicle.";
-  const lines = data.map((r) => {
-    const parts = [
-      `Campaign: ${r.NHTSACampaignNumber ?? "?"}`,
-      `${r.ModelYear ?? "?"} ${r.Make ?? "?"} ${r.Model ?? "?"}`,
-      `Component: ${r.Component ?? "?"}`,
-      `Summary: ${r.Summary ?? "N/A"}`,
-      `Consequence: ${r.Consequence ?? "N/A"}`,
-      `Remedy: ${r.Remedy ?? "N/A"}`,
-    ];
-    if (r.parkIt) parts.push("⚠ PARK IT: Do not drive");
-    return parts.join("\n  ");
-  });
-  return `${data.length} recall(s) found:\n\n${lines.join("\n\n")}`;
+function recallToRecord(r: Recall): Record<string, unknown> {
+  const record: Record<string, unknown> = {
+    campaignNumber: r.NHTSACampaignNumber ?? null,
+    modelYear: r.ModelYear ?? null,
+    make: r.Make ?? null,
+    model: r.Model ?? null,
+    component: r.Component ?? null,
+    summary: r.Summary ?? null,
+    consequence: r.Consequence ?? null,
+    remedy: r.Remedy ?? null,
+  };
+  if (r.parkIt) record.parkIt = true;
+  return record;
 }
 
-function summarizeComplaints(data: Complaint[]): string {
-  if (!data.length) return "No complaints found for this vehicle.";
-  const stats = {
-    total: data.length,
-    crashes: data.filter((c) => c.crash).length,
-    fires: data.filter((c) => c.fire).length,
-    injuries: data.reduce((sum, c) => sum + (c.numberOfInjuries ?? 0), 0),
-    deaths: data.reduce((sum, c) => sum + (c.numberOfDeaths ?? 0), 0),
+function complaintToRecord(c: Complaint): Record<string, unknown> {
+  const product = c.products?.[0];
+  return {
+    odiNumber: c.odiNumber ?? null,
+    dateOfIncident: c.dateOfIncident ?? c.dateComplaintFiled ?? null,
+    vehicle: product ? `${product.productYear ?? ""} ${product.productMake ?? ""} ${product.productModel ?? ""}`.trim() : null,
+    components: c.components ?? null,
+    summary: c.summary ?? null,
+    crash: c.crash ?? false,
+    fire: c.fire ?? false,
+    numberOfInjuries: c.numberOfInjuries ?? 0,
+    numberOfDeaths: c.numberOfDeaths ?? 0,
   };
-  const header = `${stats.total} complaint(s) — ${stats.crashes} crash(es), ${stats.fires} fire(s), ${stats.injuries} injury(ies), ${stats.deaths} death(s)`;
-
-  const preview = data.slice(0, 10);
-  const lines = preview.map((c) => {
-    const date = c.dateOfIncident ?? c.dateComplaintFiled ?? "?";
-    const product = c.products?.[0];
-    const vehicle = product ? `${product.productYear ?? ""} ${product.productMake ?? ""} ${product.productModel ?? ""}`.trim() : "?";
-    return `[${c.odiNumber ?? "?"}] ${date} — ${vehicle}\n  Component: ${c.components ?? "?"}\n  ${c.summary ?? "No summary"}${c.crash ? "\n  ⚠ CRASH" : ""}${c.fire ? "\n  🔥 FIRE" : ""}`;
-  });
-
-  return `${header}\n\n${lines.join("\n\n")}${data.length > 10 ? `\n\n... and ${data.length - 10} more` : ""}`;
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────
@@ -87,7 +79,8 @@ export const tools: Tool<any, any>[] = [
         model: args.model,
         modelYear: args.model_year,
       });
-      return { content: [{ type: "text" as const, text: summarizeRecalls(data) }] };
+      if (!data.length) return emptyResponse("No recalls found for this vehicle.");
+      return listResponse(`${data.length} recall(s) found`, { items: data.map(recallToRecord), total: data.length });
     },
   },
   {
@@ -106,7 +99,17 @@ export const tools: Tool<any, any>[] = [
         model: args.model,
         modelYear: args.model_year,
       });
-      return { content: [{ type: "text" as const, text: summarizeComplaints(data) }] };
+      if (!data.length) return emptyResponse("No complaints found for this vehicle.");
+      const stats = {
+        crashes: data.filter((c) => c.crash).length,
+        fires: data.filter((c) => c.fire).length,
+        injuries: data.reduce((sum, c) => sum + (c.numberOfInjuries ?? 0), 0),
+        deaths: data.reduce((sum, c) => sum + (c.numberOfDeaths ?? 0), 0),
+      };
+      return listResponse(
+        `${data.length} complaint(s) — ${stats.crashes} crash(es), ${stats.fires} fire(s), ${stats.injuries} injury(ies), ${stats.deaths} death(s)`,
+        { items: data.map(complaintToRecord), total: data.length },
+      );
     },
   },
   {
@@ -120,28 +123,30 @@ export const tools: Tool<any, any>[] = [
     execute: async (args) => {
       const result = await decodeVin(args.vin);
       if (result.ErrorCode && result.ErrorCode !== "0") {
-        return { content: [{ type: "text" as const, text: `VIN decode error: ${result.ErrorText ?? "Unknown error"}` }] };
+        return emptyResponse(`VIN decode error: ${result.ErrorText ?? "Unknown error"}`);
       }
-      const fields = [
-        ["Make", result.Make],
-        ["Model", result.Model],
-        ["Year", result.ModelYear],
-        ["Manufacturer", result.Manufacturer],
-        ["Vehicle Type", result.VehicleType],
-        ["Body Class", result.BodyClass],
-        ["Drive Type", result.DriveType],
-        ["Fuel Type", result.FuelTypePrimary],
-        ["Engine", result.EngineModel],
-        ["Cylinders", result.EngineCylinders],
-        ["Displacement (L)", result.DisplacementL],
-        ["Transmission", result.TransmissionStyle],
-        ["Plant City", result.PlantCity],
-        ["Plant Country", result.PlantCountry],
-      ]
-        .filter(([, v]) => v)
-        .map(([k, v]) => `${k}: ${v}`);
-
-      return { content: [{ type: "text" as const, text: fields.join("\n") || "No data returned for this VIN." }] };
+      const record: Record<string, unknown> = {
+        Make: result.Make,
+        Model: result.Model,
+        Year: result.ModelYear,
+        Manufacturer: result.Manufacturer,
+        VehicleType: result.VehicleType,
+        BodyClass: result.BodyClass,
+        DriveType: result.DriveType,
+        FuelType: result.FuelTypePrimary,
+        Engine: result.EngineModel,
+        Cylinders: result.EngineCylinders,
+        DisplacementL: result.DisplacementL,
+        Transmission: result.TransmissionStyle,
+        PlantCity: result.PlantCity,
+        PlantCountry: result.PlantCountry,
+      };
+      // Remove undefined/null fields
+      for (const key of Object.keys(record)) {
+        if (record[key] == null) delete record[key];
+      }
+      if (!Object.keys(record).length) return emptyResponse("No data returned for this VIN.");
+      return recordResponse(`VIN ${args.vin}: ${record.Year ?? ""} ${record.Make ?? ""} ${record.Model ?? ""}`.trim(), record);
     },
   },
   {
@@ -158,11 +163,12 @@ export const tools: Tool<any, any>[] = [
         make: args.make,
         modelYear: args.model_year,
       });
-      if (!data.length) return { content: [{ type: "text" as const, text: `No models found for make '${args.make}'.` }] };
-      const models = data.map((m) => m.Model_Name).sort();
-      return {
-        content: [{ type: "text" as const, text: `${models.length} model(s) for ${args.make}${args.model_year ? ` (${args.model_year})` : ""}:\n${models.join(", ")}` }],
-      };
+      if (!data.length) return emptyResponse(`No models found for make '${args.make}'.`);
+      const items = data.map((m) => ({ Model_Name: m.Model_Name }));
+      return listResponse(
+        `${data.length} model(s) for ${args.make}${args.model_year ? ` (${args.model_year})` : ""}`,
+        { items, total: data.length },
+      );
     },
   },
 
@@ -180,7 +186,7 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const vehicles = await getSafetyRatingVehicles({ make: args.make, model: args.model, modelYear: args.model_year });
-      if (!vehicles.length) return { content: [{ type: "text" as const, text: `No safety ratings found for ${args.model_year} ${args.make} ${args.model}. Try different spelling or year.` }] };
+      if (!vehicles.length) return emptyResponse(`No safety ratings found for ${args.model_year} ${args.make} ${args.model}. Try different spelling or year.`);
 
       // Get detailed ratings for each variant
       const details = [];
@@ -192,27 +198,37 @@ export const tools: Tool<any, any>[] = [
       }
 
       if (!details.length) {
-        const names = vehicles.map(v => v.VehicleDescription).join(", ");
-        return { content: [{ type: "text" as const, text: `Found ${vehicles.length} variant(s): ${names}\nNo detailed ratings available yet.` }] };
+        const items = vehicles.map(v => ({ VehicleDescription: v.VehicleDescription, VehicleId: v.VehicleId }));
+        return listResponse(
+          `${vehicles.length} variant(s) found, no detailed ratings available yet`,
+          { items, total: vehicles.length },
+        );
       }
 
-      const lines = details.map(r => {
-        const parts = [
-          `${r.VehicleDescription ?? "?"}`,
-          `  Overall: ${r.OverallRating ?? "N/R"} stars`,
-          `  Front Crash: ${r.OverallFrontCrashRating ?? "N/R"} (driver: ${r.FrontCrashDriversideRating ?? "?"}, passenger: ${r.FrontCrashPassengersideRating ?? "?"})`,
-          `  Side Crash: ${r.OverallSideCrashRating ?? "N/R"} (driver: ${r.SideCrashDriversideRating ?? "?"}, passenger: ${r.SideCrashPassengersideRating ?? "?"})`,
-          `  Rollover: ${r.RolloverRating ?? "N/R"} (risk: ${r.RolloverPossibility != null ? r.RolloverPossibility + "%" : "?"})`,
-        ];
-        if (r.SidePoleCrashRating) parts.push(`  Side Pole Crash: ${r.SidePoleCrashRating}`);
-        if (r.NHTSAElectronicStabilityControl) parts.push(`  ESC: ${r.NHTSAElectronicStabilityControl}`);
-        if (r.NHTSAForwardCollisionWarning) parts.push(`  Forward Collision Warning: ${r.NHTSAForwardCollisionWarning}`);
-        if (r.NHTSALaneDepartureWarning) parts.push(`  Lane Departure Warning: ${r.NHTSALaneDepartureWarning}`);
-        if (r.ComplaintsCount != null) parts.push(`  Complaints: ${r.ComplaintsCount} | Recalls: ${r.RecallsCount ?? 0} | Investigations: ${r.InvestigationCount ?? 0}`);
-        return parts.join("\n");
-      });
+      const items = details.map(r => ({
+        VehicleDescription: r.VehicleDescription ?? null,
+        OverallRating: r.OverallRating ?? null,
+        FrontCrashDriverside: r.FrontCrashDriversideRating ?? null,
+        FrontCrashPassengerside: r.FrontCrashPassengersideRating ?? null,
+        OverallFrontCrash: r.OverallFrontCrashRating ?? null,
+        SideCrashDriverside: r.SideCrashDriversideRating ?? null,
+        SideCrashPassengerside: r.SideCrashPassengersideRating ?? null,
+        OverallSideCrash: r.OverallSideCrashRating ?? null,
+        RolloverRating: r.RolloverRating ?? null,
+        RolloverPossibility: r.RolloverPossibility ?? null,
+        SidePoleCrash: r.SidePoleCrashRating ?? null,
+        ESC: r.NHTSAElectronicStabilityControl ?? null,
+        ForwardCollisionWarning: r.NHTSAForwardCollisionWarning ?? null,
+        LaneDepartureWarning: r.NHTSALaneDepartureWarning ?? null,
+        ComplaintsCount: r.ComplaintsCount ?? null,
+        RecallsCount: r.RecallsCount ?? null,
+        InvestigationCount: r.InvestigationCount ?? null,
+      }));
 
-      return { content: [{ type: "text" as const, text: `NHTSA Safety Ratings for ${args.model_year} ${args.make} ${args.model}:\n\n${lines.join("\n\n")}` }] };
+      return listResponse(
+        `NHTSA Safety Ratings for ${args.model_year} ${args.make} ${args.model}: ${details.length} variant(s)`,
+        { items, total: details.length },
+      );
     },
   },
 ];

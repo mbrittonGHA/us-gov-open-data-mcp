@@ -14,6 +14,7 @@ import {
   getStateIncomeLimits,
   clearCache as sdkClearCache,
 } from "../sdk/hud.js";
+import { listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -32,57 +33,30 @@ export const tips =
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-function formatFmr(data: Record<string, unknown>): string {
+function fmrToRecord(data: Record<string, unknown>): Record<string, unknown> {
   const basic = data.basicdata as Record<string, unknown> | undefined;
   const source = basic ?? data;
 
-  const name = source.area_name ?? source.county_name ?? source.metro_name ?? "Unknown area";
-  const year = source.year ?? data.year ?? "?";
-
-  // Try to find rent values from various possible field names
-  const eff = source.Efficiency ?? source.efficiency ?? source.rent_eff ?? "N/A";
-  const br1 = source["One-Bedroom"] ?? source.one_bedroom ?? source.rent_1br ?? "N/A";
-  const br2 = source["Two-Bedroom"] ?? source.two_bedroom ?? source.rent_2br ?? "N/A";
-  const br3 = source["Three-Bedroom"] ?? source.three_bedroom ?? source.rent_3br ?? "N/A";
-  const br4 = source["Four-Bedroom"] ?? source.four_bedroom ?? source.rent_4br ?? "N/A";
-
-  const fmt = (v: unknown) => (typeof v === "number" ? `$${v.toLocaleString()}` : String(v));
-
-  return [
-    `Fair Market Rents — ${name} (${year})`,
-    `  Efficiency: ${fmt(eff)}`,
-    `  1-Bedroom:  ${fmt(br1)}`,
-    `  2-Bedroom:  ${fmt(br2)}`,
-    `  3-Bedroom:  ${fmt(br3)}`,
-    `  4-Bedroom:  ${fmt(br4)}`,
-  ].join("\n");
+  return {
+    area_name: source.area_name ?? source.county_name ?? source.metro_name ?? "Unknown area",
+    year: source.year ?? data.year ?? null,
+    efficiency: source.Efficiency ?? source.efficiency ?? source.rent_eff ?? null,
+    oneBedroom: source["One-Bedroom"] ?? source.one_bedroom ?? source.rent_1br ?? null,
+    twoBedroom: source["Two-Bedroom"] ?? source.two_bedroom ?? source.rent_2br ?? null,
+    threeBedroom: source["Three-Bedroom"] ?? source.three_bedroom ?? source.rent_3br ?? null,
+    fourBedroom: source["Four-Bedroom"] ?? source.four_bedroom ?? source.rent_4br ?? null,
+  };
 }
 
-function formatIncomeLimits(data: Record<string, unknown>): string {
-  const name = data.area_name ?? data.county_name ?? data.metro_name ?? "Unknown area";
-  const year = data.year ?? "?";
-  const median = data.median_income ?? data.median ?? "N/A";
-  const fmt = (v: unknown) => (typeof v === "number" ? `$${v.toLocaleString()}` : String(v));
-
-  const lines = [`Income Limits — ${name} (${year})`, `Median Family Income: ${fmt(median)}`];
-
-  const categories = [
-    { key: "very_low", label: "Very Low (50%)" },
-    { key: "extremely_low", label: "Extremely Low (30%)" },
-    { key: "low", label: "Low (80%)" },
-  ];
-
-  for (const cat of categories) {
-    const vals = data[cat.key] as Record<string, number> | undefined;
-    if (vals && typeof vals === "object") {
-      const personCounts = Object.entries(vals)
-        .map(([k, v]) => `${k}-person: ${fmt(v)}`)
-        .join(", ");
-      lines.push(`  ${cat.label}: ${personCounts}`);
-    }
-  }
-
-  return lines.join("\n");
+function incomeLimitsToRecord(data: Record<string, unknown>): Record<string, unknown> {
+  return {
+    area_name: data.area_name ?? data.county_name ?? data.metro_name ?? "Unknown area",
+    year: data.year ?? null,
+    median_income: data.median_income ?? data.median ?? null,
+    very_low: data.very_low ?? null,
+    extremely_low: data.extremely_low ?? null,
+    low: data.low ?? null,
+  };
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────
@@ -105,16 +79,17 @@ export const tools: Tool<any, any>[] = [
       } else if (args.state) {
         data = await getStateFairMarketRents(args.state, args.year);
       } else {
-        return { content: [{ type: "text" as const, text: "Provide either state or entity_id." }] };
+        return emptyResponse("Provide either state or entity_id.");
       }
 
       // Handle state data which may return an array
       if (Array.isArray(data)) {
-        const lines = data.slice(0, 20).map((item: any) => formatFmr(item));
-        return { content: [{ type: "text" as const, text: lines.join("\n\n") }] };
+        const items = data.map((item: any) => fmrToRecord(item));
+        return listResponse(`Fair Market Rents: ${items.length} area(s)`, { items, total: data.length });
       }
 
-      return { content: [{ type: "text" as const, text: formatFmr(data) }] };
+      const record = fmrToRecord(data);
+      return recordResponse(`Fair Market Rents — ${record.area_name}`, record);
     },
   },
   {
@@ -134,15 +109,16 @@ export const tools: Tool<any, any>[] = [
       } else if (args.state) {
         data = await getStateIncomeLimits(args.state, args.year);
       } else {
-        return { content: [{ type: "text" as const, text: "Provide either state or entity_id." }] };
+        return emptyResponse("Provide either state or entity_id.");
       }
 
       if (Array.isArray(data)) {
-        const lines = data.slice(0, 20).map((item: any) => formatIncomeLimits(item));
-        return { content: [{ type: "text" as const, text: lines.join("\n\n") }] };
+        const items = data.map((item: any) => incomeLimitsToRecord(item));
+        return listResponse(`Income Limits: ${items.length} area(s)`, { items, total: data.length });
       }
 
-      return { content: [{ type: "text" as const, text: formatIncomeLimits(data) }] };
+      const record = incomeLimitsToRecord(data);
+      return recordResponse(`Income Limits — ${record.area_name}`, record);
     },
   },
   {
@@ -152,9 +128,8 @@ export const tools: Tool<any, any>[] = [
     parameters: z.object({}),
     execute: async () => {
       const states = await listStates();
-      if (!states.length) return { content: [{ type: "text" as const, text: "No states returned." }] };
-      const lines = states.map((s) => `${s.state_code}: ${s.state_name}`);
-      return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+      if (!states.length) return emptyResponse("No states returned.");
+      return listResponse(`${states.length} U.S. state(s)`, { items: states.map(s => ({ ...s })), total: states.length });
     },
   },
   {
@@ -166,11 +141,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const counties = await listCounties(args.state);
-      if (!counties.length) return { content: [{ type: "text" as const, text: `No counties found for state '${args.state}'.` }] };
-      const lines = counties.map((c) => `${c.fips_code}: ${c.county_name}`);
-      return {
-        content: [{ type: "text" as const, text: `${counties.length} county/area(s) in ${args.state.toUpperCase()}:\n${lines.join("\n")}` }],
-      };
+      if (!counties.length) return emptyResponse(`No counties found for state '${args.state}'.`);
+      return listResponse(
+        `${counties.length} county/area(s) in ${args.state.toUpperCase()}`,
+        { items: counties.map(c => ({ ...c })), total: counties.length },
+      );
     },
   },
   {
@@ -180,17 +155,11 @@ export const tools: Tool<any, any>[] = [
     parameters: z.object({}),
     execute: async () => {
       const areas = await listMetroAreas();
-      if (!areas.length) return { content: [{ type: "text" as const, text: "No metro areas returned." }] };
-      const preview = areas.slice(0, 50);
-      const lines = preview.map((a) => `${a.cbsa_code}: ${a.area_name}`);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `${areas.length} metro area(s)${areas.length > 50 ? " (showing first 50)" : ""}:\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      if (!areas.length) return emptyResponse("No metro areas returned.");
+      return listResponse(
+        `${areas.length} metro area(s)`,
+        { items: areas.map(a => ({ ...a })), total: areas.length },
+      );
     },
   },
 ];

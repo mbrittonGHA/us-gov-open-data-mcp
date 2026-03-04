@@ -14,6 +14,7 @@ import {
   getDocket,
   DOCUMENT_TYPES,
 } from "../sdk/regulations.js";
+import { listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -66,21 +67,23 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await searchDocuments(args);
-      if (!data.data?.length) return `No documents found${args.searchTerm ? ` for '${args.searchTerm}'` : ""}.`;
-      return JSON.stringify({
-        summary: `Found ${data.meta?.totalElements ?? data.data.length} regulatory documents${args.agencyId ? ` from ${args.agencyId}` : ""}${args.searchTerm ? ` matching '${args.searchTerm}'` : ""}, showing ${data.data.length}`,
-        total: data.meta?.totalElements,
-        documents: data.data.map(d => ({
-          documentId: d.id,
-          title: d.attributes.title,
-          agency: d.attributes.agencyId,
-          type: d.attributes.documentType,
-          docket: d.attributes.docketId,
-          posted: d.attributes.postedDate,
-          commentEndDate: d.attributes.commentEndDate,
-          withdrawn: d.attributes.withdrawn,
-        })),
-      });
+      if (!data.data?.length) return emptyResponse(`No documents found${args.searchTerm ? ` for '${args.searchTerm}'` : ""}.`);
+      return listResponse(
+        `Found ${data.meta?.totalElements ?? data.data.length} regulatory documents${args.agencyId ? ` from ${args.agencyId}` : ""}${args.searchTerm ? ` matching '${args.searchTerm}'` : ""}, showing ${data.data.length}`,
+        {
+          total: data.meta?.totalElements,
+          items: data.data.map(d => ({
+            documentId: d.id,
+            title: d.attributes.title,
+            agency: d.attributes.agencyId,
+            type: d.attributes.documentType,
+            docket: d.attributes.docketId,
+            posted: d.attributes.postedDate,
+            commentEndDate: d.attributes.commentEndDate,
+            withdrawn: d.attributes.withdrawn,
+          })),
+        },
+      );
     },
   },
 
@@ -93,7 +96,7 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ documentId }) => {
       const data = await getDocument(documentId);
-      return JSON.stringify(data.data);
+      return recordResponse(`Regulatory document: ${documentId}`, data.data);
     },
   },
 
@@ -116,19 +119,21 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await searchComments(args);
-      if (!data.data?.length) return `No comments found${args.searchTerm ? ` for '${args.searchTerm}'` : ""}.`;
-      return JSON.stringify({
-        summary: `Found ${data.meta?.totalElements ?? data.data.length} public comments${args.agencyId ? ` for ${args.agencyId}` : ""}${args.docketId ? ` on docket ${args.docketId}` : ""}, showing ${data.data.length}`,
-        total: data.meta?.totalElements,
-        comments: data.data.map(c => ({
-          commentId: c.id,
-          title: c.attributes.title,
-          agency: c.attributes.agencyId,
-          docket: c.attributes.docketId,
-          posted: c.attributes.postedDate,
-          comment: c.attributes.comment,
-        })),
-      });
+      if (!data.data?.length) return emptyResponse(`No comments found${args.searchTerm ? ` for '${args.searchTerm}'` : ""}.`);
+      return listResponse(
+        `Found ${data.meta?.totalElements ?? data.data.length} public comments${args.agencyId ? ` for ${args.agencyId}` : ""}${args.docketId ? ` on docket ${args.docketId}` : ""}, showing ${data.data.length}`,
+        {
+          total: data.meta?.totalElements,
+          items: data.data.map(c => ({
+            commentId: c.id,
+            title: c.attributes.title,
+            agency: c.attributes.agencyId,
+            docket: c.attributes.docketId,
+            posted: c.attributes.postedDate,
+            comment: c.attributes.comment,
+          })),
+        },
+      );
     },
   },
 
@@ -141,7 +146,7 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ commentId }) => {
       const data = await getComment(commentId);
-      return JSON.stringify(data.data);
+      return recordResponse(`Public comment: ${commentId}`, data.data);
     },
   },
 
@@ -162,18 +167,20 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await searchDockets(args);
-      if (!data.data?.length) return `No dockets found${args.searchTerm ? ` for '${args.searchTerm}'` : ""}.`;
-      return JSON.stringify({
-        summary: `Found ${data.meta?.totalElements ?? data.data.length} dockets${args.agencyId ? ` from ${args.agencyId}` : ""}, showing ${data.data.length}`,
-        total: data.meta?.totalElements,
-        dockets: data.data.map(d => ({
-          docketId: d.id,
-          title: d.attributes.title,
-          agency: d.attributes.agencyId,
-          type: d.attributes.docketType,
-          lastModified: d.attributes.lastModifiedDate,
-        })),
-      });
+      if (!data.data?.length) return emptyResponse(`No dockets found${args.searchTerm ? ` for '${args.searchTerm}'` : ""}.`);
+      return listResponse(
+        `Found ${data.meta?.totalElements ?? data.data.length} dockets${args.agencyId ? ` from ${args.agencyId}` : ""}, showing ${data.data.length}`,
+        {
+          total: data.meta?.totalElements,
+          items: data.data.map(d => ({
+            docketId: d.id,
+            title: d.attributes.title,
+            agency: d.attributes.agencyId,
+            type: d.attributes.docketType,
+            lastModified: d.attributes.lastModifiedDate,
+          })),
+        },
+      );
     },
   },
 
@@ -186,7 +193,7 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ docketId }) => {
       const data = await getDocket(docketId);
-      return JSON.stringify(data.data);
+      return recordResponse(`Regulatory docket: ${docketId}`, data.data);
     },
   },
 ];

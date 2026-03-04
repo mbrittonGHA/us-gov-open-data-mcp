@@ -16,6 +16,7 @@ import {
   VIOLATION_TYPES,
   DATASETS,
 } from "../sdk/dol.js";
+import { tableResponse, emptyResponse } from "../response.js";
 
 export const name = "dol";
 export const displayName = "DOL (Department of Labor)";
@@ -72,11 +73,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getOshaInspections(args);
-      if (!Array.isArray(data) || !data.length) return "No OSHA inspections found matching the criteria.";
-      return JSON.stringify({
-        summary: `OSHA inspections: ${data.length} records`,
-        inspections: data.slice(0, 50),
-      });
+      if (!Array.isArray(data) || !data.length) return emptyResponse("No OSHA inspections found matching the criteria.");
+      return tableResponse(
+        `OSHA inspections: ${data.length} records`,
+        { rows: data },
+      );
     },
   },
 
@@ -99,11 +100,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getOshaViolations(args);
-      if (!Array.isArray(data) || !data.length) return "No OSHA violations found matching the criteria.";
-      return JSON.stringify({
-        summary: `OSHA violations: ${data.length} records`,
-        violations: data.slice(0, 50),
-      });
+      if (!Array.isArray(data) || !data.length) return emptyResponse("No OSHA violations found matching the criteria.");
+      return tableResponse(
+        `OSHA violations: ${data.length} records`,
+        { rows: data },
+      );
     },
   },
 
@@ -125,11 +126,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getOshaAccidents(args);
-      if (!Array.isArray(data) || !data.length) return "No OSHA accidents found matching the criteria.";
-      return JSON.stringify({
-        summary: `OSHA accident investigations: ${data.length} records`,
-        accidents: data.slice(0, 50),
-      });
+      if (!Array.isArray(data) || !data.length) return emptyResponse("No OSHA accidents found matching the criteria.");
+      return tableResponse(
+        `OSHA accident investigations: ${data.length} records`,
+        { rows: data },
+      );
     },
   },
 
@@ -149,11 +150,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getOshaAccidentInjuries(args);
-      if (!Array.isArray(data) || !data.length) return "No injury records found.";
-      return JSON.stringify({
-        summary: `OSHA accident injuries: ${data.length} records`,
-        injuries: data.slice(0, 50),
-      });
+      if (!Array.isArray(data) || !data.length) return emptyResponse("No injury records found.");
+      return tableResponse(
+        `OSHA accident injuries: ${data.length} records`,
+        { rows: data },
+      );
     },
   },
 
@@ -176,11 +177,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getWhdEnforcement(args);
-      if (!Array.isArray(data) || !data.length) return "No WHD enforcement cases found matching the criteria.";
-      return JSON.stringify({
-        summary: `WHD enforcement cases: ${data.length} records`,
-        cases: data.slice(0, 50),
-      });
+      if (!Array.isArray(data) || !data.length) return emptyResponse("No WHD enforcement cases found matching the criteria.");
+      return tableResponse(
+        `WHD enforcement cases: ${data.length} records`,
+        { rows: data },
+      );
     },
   },
 
@@ -199,11 +200,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getUiClaimsNational(args);
-      if (!Array.isArray(data) || !data.length) return "No UI claims data found.";
-      return JSON.stringify({
-        summary: `National UI claims: ${data.length} weekly records`,
-        claims: data.slice(0, 100),
-      });
+      if (!Array.isArray(data) || !data.length) return emptyResponse("No UI claims data found.");
+      return tableResponse(
+        `National UI claims: ${data.length} weekly records`,
+        { rows: data },
+      );
     },
   },
 
@@ -222,11 +223,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async (args) => {
       const data = await getUiClaimsState(args);
-      if (!Array.isArray(data) || !data.length) return "No state UI claims data found.";
-      return JSON.stringify({
-        summary: `State UI claims: ${data.length} records${args.state ? ` for ${args.state}` : ""}`,
-        claims: data.slice(0, 100),
-      });
+      if (!Array.isArray(data) || !data.length) return emptyResponse("No state UI claims data found.");
+      return tableResponse(
+        `State UI claims: ${data.length} records${args.state ? ` for ${args.state}` : ""}`,
+        { rows: data },
+      );
     },
   },
 ];

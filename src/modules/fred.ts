@@ -7,6 +7,7 @@
 import { z } from "zod";
 import type { Tool, InputPrompt } from "fastmcp";
 import { searchSeries, getSeriesInfo, getObservations, getReleaseData } from "../sdk/fred.js";
+import { timeseriesResponse, listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -46,12 +47,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ query, limit }) => {
       const data = await searchSeries(query, limit ?? 20);
-      if (!data.seriess?.length) return `No series found for "${query}".`;
-      return JSON.stringify({
-        summary: `FRED search "${query}": ${data.count} total, showing ${data.seriess.length}`,
-        total: data.count,
-        series: data.seriess,
-      });
+      if (!data.seriess?.length) return emptyResponse(`No series found for "${query}".`);
+      return listResponse(
+        `FRED search "${query}": ${data.count} total, showing ${data.seriess.length}`,
+        { items: data.seriess, total: data.count },
+      );
     },
   },
 
@@ -64,11 +64,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ series_id }) => {
       const s = await getSeriesInfo(series_id);
-      if (!s) return `"${series_id}" not found.`;
-      return JSON.stringify({
-        summary: `${s.id}: ${s.title} (${s.frequency}, ${s.units}, ${s.observation_start}–${s.observation_end})`,
-        ...s,
-      });
+      if (!s) return emptyResponse(`"${series_id}" not found.`);
+      return recordResponse(
+        `${s.id}: ${s.title} (${s.frequency}, ${s.units}, ${s.observation_start}–${s.observation_end})`,
+        s,
+      );
     },
   },
 
@@ -88,16 +88,17 @@ export const tools: Tool<any, any>[] = [
       const data = await getObservations(series_id, {
         start: start_date, end: end_date, limit, sort: sort_order, frequency,
       });
-      if (!data.observations?.length) return `No observations for "${series_id}".`;
-      const obs = data.observations.slice(0, 100);
-      return JSON.stringify({
-        summary: `${series_id.toUpperCase()}: ${obs.length} of ${data.count} observations, ${data.observation_start} to ${data.observation_end}`,
-        seriesId: series_id.toUpperCase(),
-        total: data.count,
-        start: data.observation_start,
-        end: data.observation_end,
-        observations: obs,
-      });
+      if (!data.observations?.length) return emptyResponse(`No observations for "${series_id}".`);
+      return timeseriesResponse(
+        `${series_id.toUpperCase()}: ${data.count} observations, ${data.observation_start} to ${data.observation_end}`,
+        {
+          rows: data.observations,
+          dateKey: "date",
+          valueKey: "value",
+          total: data.count,
+          meta: { seriesId: series_id.toUpperCase(), start: data.observation_start, end: data.observation_end },
+        },
+      );
     },
   },
 
@@ -111,14 +112,15 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ release_id, limit }) => {
       const data = await getReleaseData(release_id, limit);
-      const series = data.series?.slice(0, 30) ?? [];
-      return JSON.stringify({
-        summary: `${data.release?.name ?? `Release ${release_id}`}: ${data.series?.length ?? 0} series, has_more: ${data.has_more}`,
-        release: data.release,
-        hasMore: data.has_more,
-        nextCursor: data.next_cursor ?? null,
-        series,
-      });
+      const series = data.series ?? [];
+      if (!series.length) return emptyResponse(`No series found for release ${release_id}.`);
+      return listResponse(
+        `${data.release?.name ?? `Release ${release_id}`}: ${series.length} series, has_more: ${data.has_more}`,
+        {
+          items: series,
+          meta: { release: data.release, hasMore: data.has_more, nextCursor: data.next_cursor ?? null },
+        },
+      );
     },
   },
 ];

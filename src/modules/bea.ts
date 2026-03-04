@@ -12,6 +12,7 @@ import {
   getPersonalIncome,
   getGdpByIndustry,
 } from "../sdk/bea.js";
+import { tableResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -75,11 +76,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ table_name, frequency, year }) => {
       const data = await getNationalGdp({ tableName: table_name, frequency, year });
-      if (!data.series.length) return JSON.stringify({ summary: "No GDP data returned.", ...data });
-      return JSON.stringify({
-        summary: `BEA National GDP — Table ${data.table} (${data.frequency}): ${data.dataRows} rows, ${data.series.length} series`,
-        ...data,
-      });
+      if (!data.series.length) return emptyResponse("No GDP data returned.");
+      return tableResponse(
+        `BEA National GDP — Table ${data.table} (${data.frequency}): ${data.dataRows} rows, ${data.series.length} series`,
+        { rows: data.series, meta: { table: data.table, frequency: data.frequency, dataRows: data.dataRows } },
+      );
     },
   },
 
@@ -107,17 +108,17 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ table_name, geo_fips, line_code, year }) => {
       const data = await getGdpByState({ tableName: table_name, geoFips: geo_fips, lineCode: line_code, year });
-      if (data.states && !data.states.length) return JSON.stringify({ summary: "No state GDP data returned.", ...data });
+      if (data.states && !data.states.length) return emptyResponse("No state GDP data returned.");
       if (data.states) {
-        return JSON.stringify({
-          summary: `GDP by state (${data.year}): ${data.states.length} states, values in ${data.unit}`,
-          ...data,
-        });
+        return tableResponse(
+          `GDP by state (${data.year}): ${data.states.length} states, values in ${data.unit}`,
+          { rows: data.states, meta: { year: data.year, unit: data.unit } },
+        );
       }
-      return JSON.stringify({
-        summary: `BEA State GDP for ${data.geoFips}: ${data.series?.length ?? 0} series, values in ${data.unit}`,
-        ...data,
-      });
+      return tableResponse(
+        `BEA State GDP for ${data.geoFips}: ${data.series?.length ?? 0} series, values in ${data.unit}`,
+        { rows: data.series ?? [], meta: { geoFips: data.geoFips, unit: data.unit } },
+      );
     },
   },
 
@@ -146,11 +147,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ table_name, geo_fips, line_code, year }) => {
       const data = await getPersonalIncome({ tableName: table_name, geoFips: geo_fips, lineCode: line_code, year });
-      if (!data.states.length) return JSON.stringify({ summary: "No personal income data returned.", ...data });
-      return JSON.stringify({
-        summary: `BEA Personal Income — ${data.table} (${data.year}): ${data.states.length} areas, values ${data.unit}`,
-        ...data,
-      });
+      if (!data.states.length) return emptyResponse("No personal income data returned.");
+      return tableResponse(
+        `BEA Personal Income — ${data.table} (${data.year}): ${data.states.length} areas, values ${data.unit}`,
+        { rows: data.states, meta: { table: data.table, year: data.year, unit: data.unit } },
+      );
     },
   },
 
@@ -178,11 +179,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ table_id, frequency, year, industry }) => {
       const data = await getGdpByIndustry({ tableId: table_id, frequency, year, industry });
-      if (!data.industries.length) return JSON.stringify({ summary: "No industry GDP data returned.", ...data });
-      return JSON.stringify({
-        summary: `BEA GDP by Industry — Table ${data.tableId}: ${data.industries.length} industries`,
-        ...data,
-      });
+      if (!data.industries.length) return emptyResponse("No industry GDP data returned.");
+      return tableResponse(
+        `BEA GDP by Industry — Table ${data.tableId}: ${data.industries.length} industries`,
+        { rows: data.industries, meta: { tableId: data.tableId } },
+      );
     },
   },
 ];

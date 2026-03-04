@@ -15,6 +15,7 @@ import {
   OWNERSHIP,
   DEGREE_TYPES,
 } from "../sdk/college-scorecard.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -96,12 +97,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ name, state, ownership, sort, per_page }) => {
       const data = await searchSchools({ name, state, ownership, sort, perPage: per_page });
-      if (!data.results?.length) return `No schools found${name ? ` matching "${name}"` : ""}.`;
-      return JSON.stringify({
-        summary: `College Scorecard: ${data.metadata.total} schools found, showing ${data.results.length}`,
-        total: data.metadata.total,
-        schools: data.results.map(formatSchool),
-      });
+      if (!data.results?.length) return emptyResponse(`No schools found${name ? ` matching "${name}"` : ""}.`);
+      return tableResponse(
+        `College Scorecard: ${data.metadata.total} schools found, showing ${data.results.length}`,
+        { rows: data.results.map(formatSchool), total: data.metadata.total },
+      );
     },
   },
 
@@ -122,10 +122,10 @@ export const tools: Tool<any, any>[] = [
           return data.results?.[0] ? formatSchool(data.results[0]) : { name: n, error: "Not found" };
         })
       );
-      return JSON.stringify({
-        summary: `Comparing ${results.length} schools`,
-        schools: results,
-      });
+      return tableResponse(
+        `Comparing ${results.length} schools`,
+        { rows: results },
+      );
     },
   },
 
@@ -152,12 +152,11 @@ export const tools: Tool<any, any>[] = [
       } else {
         data = await getHighestEarners({ ownership, perPage: per_page });
       }
-      if (!data.results?.length) return `No schools found for "${ranking}" ranking.`;
-      return JSON.stringify({
-        summary: `Top schools by ${ranking}: ${data.results.length} schools`,
-        ranking,
-        schools: data.results.map(formatSchool),
-      });
+      if (!data.results?.length) return emptyResponse(`No schools found for "${ranking}" ranking.`);
+      return tableResponse(
+        `Top schools by ${ranking}: ${data.results.length} schools`,
+        { rows: data.results.map(formatSchool), meta: { ranking } },
+      );
     },
   },
 
@@ -185,12 +184,11 @@ export const tools: Tool<any, any>[] = [
       if (sort) params.sort = sort;
       if (per_page) params.per_page = per_page;
       const data = await querySchools(params);
-      if (!data.results?.length) return "No schools found matching the filters.";
-      return JSON.stringify({
-        summary: `College Scorecard query: ${data.metadata.total} schools found, showing ${data.results.length}`,
-        total: data.metadata.total,
-        schools: data.results.map(formatSchool),
-      });
+      if (!data.results?.length) return emptyResponse("No schools found matching the filters.");
+      return tableResponse(
+        `College Scorecard query: ${data.metadata.total} schools found, showing ${data.results.length}`,
+        { rows: data.results.map(formatSchool), total: data.metadata.total },
+      );
     },
   },
 ];

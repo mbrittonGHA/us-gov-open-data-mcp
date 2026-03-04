@@ -13,6 +13,7 @@ import {
   queryFiscalData,
   ENDPOINTS,
 } from "../sdk/treasury.js";
+import { tableResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -69,11 +70,10 @@ export const tools: Tool<any, any>[] = [
         })),
       }));
 
-      return JSON.stringify({
-        summary: `U.S. Treasury Fiscal Data: ${Object.keys(grouped).length} datasets, ${ENDPOINTS.length} total endpoints`,
-        baseUrl: "https://api.fiscaldata.treasury.gov/services/api/fiscal_service",
-        datasets,
-      });
+      return listResponse(
+        `U.S. Treasury Fiscal Data: ${Object.keys(grouped).length} datasets, ${ENDPOINTS.length} total endpoints`,
+        { items: datasets },
+      );
     },
   },
 
@@ -92,7 +92,7 @@ export const tools: Tool<any, any>[] = [
       const matches = searchEndpoints(query);
 
       if (!matches.length) {
-        return JSON.stringify({ summary: `No datasets found matching "${query}". Try a broader search term.`, matches: [] });
+        return emptyResponse(`No datasets found matching "${query}". Try a broader search term.`);
       }
 
       const results = matches.map(ep => ({
@@ -100,13 +100,12 @@ export const tools: Tool<any, any>[] = [
         dataTable: ep.dataTable,
         endpoint: ep.endpoint,
         description: ep.description,
-        datasetUrl: `https://fiscaldata.treasury.gov/datasets${ep.slug}`,
       }));
 
-      return JSON.stringify({
-        summary: `Found ${matches.length} endpoint(s) matching "${query}"`,
-        matches: results,
-      });
+      return listResponse(
+        `Found ${matches.length} endpoint(s) matching "${query}"`,
+        { items: results },
+      );
     },
   },
 
@@ -132,12 +131,10 @@ export const tools: Tool<any, any>[] = [
         format: res.meta.dataFormats?.[f] || "unknown",
       }));
 
-      return JSON.stringify({
-        summary: `Endpoint ${endpoint}: ${fields.length} fields, ${res.meta["total-count"]} total records`,
-        endpoint,
-        totalRecords: res.meta["total-count"],
-        fields: fieldDetails,
-      });
+      return listResponse(
+        `Endpoint ${endpoint}: ${fields.length} fields, ${res.meta["total-count"]} total records`,
+        { items: fieldDetails, meta: { endpoint, totalRecords: res.meta["total-count"] } },
+      );
     },
   },
 
@@ -172,26 +169,18 @@ export const tools: Tool<any, any>[] = [
         pageSize: page_size,
       });
 
-      const maxRows = 50;
-      const rows = res.data.slice(0, maxRows);
-      const truncated = res.data.length > maxRows;
-
-      const fieldInfo = Object.entries(res.meta.labels).map(([k, v]) => ({
-        name: k,
-        label: v,
-        type: res.meta.dataTypes[k] || "unknown",
-      }));
-
-      return JSON.stringify({
-        summary: `Query ${endpoint}: ${res.meta.count} returned, ${res.meta["total-count"]} total, page ${page_number || 1} of ${res.meta["total-pages"]}${truncated ? ` (showing first ${maxRows})` : ""}`,
-        endpoint,
-        recordsReturned: res.meta.count,
-        totalRecords: res.meta["total-count"],
-        totalPages: res.meta["total-pages"],
-        truncated,
-        fields: fieldInfo,
-        rows,
-      });
+      return tableResponse(
+        `Query ${endpoint}: ${res.meta.count} returned, ${res.meta["total-count"]} total, page ${page_number || 1} of ${res.meta["total-pages"]}`,
+        {
+          rows: res.data,
+          total: res.meta["total-count"],
+          meta: {
+            endpoint,
+            recordsReturned: res.meta.count,
+            totalPages: res.meta["total-pages"],
+          },
+        },
+      );
     },
   },
 ];

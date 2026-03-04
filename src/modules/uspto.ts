@@ -11,6 +11,7 @@ import {
   searchAssignees,
   clearCache as sdkClearCache,
 } from "../sdk/uspto.js";
+import { listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ export const tips =
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-function formatPatent(p: {
+function patentToRecord(p: {
   patentNumber: string;
   patentTitle: string;
   patentDate: string;
@@ -35,16 +36,19 @@ function formatPatent(p: {
   assigneeOrganization: string | null;
   inventorNames: string[];
   cpcGroup: string | null;
-}): string {
-  const lines: string[] = [
-    `Patent ${p.patentNumber}: ${p.patentTitle}`,
-    `  Date: ${p.patentDate}  Type: ${p.patentType ?? "N/A"}  Claims: ${p.numClaims ?? "N/A"}`,
-  ];
-  if (p.assigneeOrganization) lines.push(`  Assignee: ${p.assigneeOrganization}`);
-  if (p.inventorNames.length) lines.push(`  Inventors: ${p.inventorNames.join(", ")}`);
-  if (p.cpcGroup) lines.push(`  CPC: ${p.cpcGroup}`);
-  if (p.patentAbstract) lines.push(`  Abstract: ${p.patentAbstract}`);
-  return lines.join("\n");
+}): Record<string, unknown> {
+  const record: Record<string, unknown> = {
+    patentNumber: p.patentNumber,
+    title: p.patentTitle,
+    date: p.patentDate,
+    type: p.patentType ?? null,
+    claims: p.numClaims ?? null,
+  };
+  if (p.assigneeOrganization) record.assignee = p.assigneeOrganization;
+  if (p.inventorNames.length) record.inventors = p.inventorNames;
+  if (p.cpcGroup) record.cpc = p.cpcGroup;
+  if (p.patentAbstract) record.abstract = p.patentAbstract;
+  return record;
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────
@@ -80,12 +84,14 @@ export const tools: Tool<any, any>[] = [
       });
 
       if (!result.patents.length) {
-        return { content: [{ type: "text" as const, text: "No patents found matching the criteria." }] };
+        return emptyResponse("No patents found matching the criteria.");
       }
 
-      const header = `Found ${result.total.toLocaleString()} patent(s). Showing ${result.patents.length}:\n`;
-      const body = result.patents.map(formatPatent).join("\n\n");
-      return { content: [{ type: "text" as const, text: header + body }] };
+      const items = result.patents.map(patentToRecord);
+      return listResponse(
+        `Found ${result.total.toLocaleString()} patent(s), showing ${result.patents.length}`,
+        { items, total: result.total },
+      );
     },
   },
   {
@@ -99,9 +105,9 @@ export const tools: Tool<any, any>[] = [
     execute: async (args) => {
       const patent = await getPatent(args.patent_number);
       if (!patent) {
-        return { content: [{ type: "text" as const, text: `Patent ${args.patent_number} not found.` }] };
+        return emptyResponse(`Patent ${args.patent_number} not found.`);
       }
-      return { content: [{ type: "text" as const, text: formatPatent(patent) }] };
+      return recordResponse(`Patent ${patent.patentNumber}: ${patent.patentTitle}`, patentToRecord(patent));
     },
   },
   {
@@ -128,22 +134,22 @@ export const tools: Tool<any, any>[] = [
       });
 
       if (!result.inventors.length) {
-        return { content: [{ type: "text" as const, text: "No inventors found matching the criteria." }] };
+        return emptyResponse("No inventors found matching the criteria.");
       }
 
-      const lines = result.inventors.map((inv) => {
-        const loc = [inv.inventorCity, inv.inventorState, inv.inventorCountry].filter(Boolean).join(", ");
-        return `${inv.inventorFirstName} ${inv.inventorLastName} — ${loc || "Location unknown"} (${inv.patentCount} patent(s))`;
-      });
+      const items = result.inventors.map((inv) => ({
+        firstName: inv.inventorFirstName,
+        lastName: inv.inventorLastName,
+        city: inv.inventorCity ?? null,
+        state: inv.inventorState ?? null,
+        country: inv.inventorCountry ?? null,
+        patentCount: inv.patentCount,
+      }));
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Found ${result.total.toLocaleString()} inventor(s). Showing ${result.inventors.length}:\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      return listResponse(
+        `Found ${result.total.toLocaleString()} inventor(s), showing ${result.inventors.length}`,
+        { items, total: result.total },
+      );
     },
   },
   {
@@ -168,23 +174,21 @@ export const tools: Tool<any, any>[] = [
       });
 
       if (!result.assignees.length) {
-        return { content: [{ type: "text" as const, text: "No assignees found matching the criteria." }] };
+        return emptyResponse("No assignees found matching the criteria.");
       }
 
-      const lines = result.assignees.map((a) => {
-        const loc = [a.assigneeCity, a.assigneeState, a.assigneeCountry].filter(Boolean).join(", ");
-        const name = a.assigneeOrganization || "(Individual)";
-        return `${name} — ${loc || "Location unknown"} (${a.patentCount} patent(s))`;
-      });
+      const items = result.assignees.map((a) => ({
+        organization: a.assigneeOrganization || null,
+        city: a.assigneeCity ?? null,
+        state: a.assigneeState ?? null,
+        country: a.assigneeCountry ?? null,
+        patentCount: a.patentCount,
+      }));
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Found ${result.total.toLocaleString()} assignee(s). Showing ${result.assignees.length}:\n${lines.join("\n")}`,
-          },
-        ],
-      };
+      return listResponse(
+        `Found ${result.total.toLocaleString()} assignee(s), showing ${result.assignees.length}`,
+        { items, total: result.total },
+      );
     },
   },
 ];

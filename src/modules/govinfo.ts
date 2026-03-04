@@ -13,6 +13,7 @@ import {
   collections,
   billVersions,
 } from "../sdk/govinfo.js";
+import { listResponse, recordResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata (server.ts reads these) ────────────────────────────────
 
@@ -50,12 +51,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ query, collection, congress, page_size }) => {
       const data = await searchPublications({ query, collection, congress, pageSize: page_size });
-      if (!data.results.length) return JSON.stringify({ summary: `No results found for "${query}".`, total: 0, results: [] });
-      return JSON.stringify({
-        summary: `GovInfo search "${query}": ${data.total} total, showing ${data.results.length}`,
-        total: data.total,
-        results: data.results,
-      });
+      if (!data.results.length) return emptyResponse(`No results found for "${query}".`);
+      return listResponse(
+        `GovInfo search "${query}": ${data.total} total, showing ${data.results.length}`,
+        { items: data.results, total: data.total },
+      );
     },
   },
 
@@ -91,39 +91,37 @@ export const tools: Tool<any, any>[] = [
         });
 
         if (!data.text) {
-          return JSON.stringify({
-            summary: `${data.title}: full text not available. Try a different version (ih, eh, es, enr).`,
+          return emptyResponse(`${data.title}: full text not available. Try a different version (ih, eh, es, enr).`);
+        }
+
+        return recordResponse(
+          `${data.title}: ${data.textLength.toLocaleString()} chars from ${data.textSource}${data.truncated ? ` (truncated to ${(max_length || 15000).toLocaleString()})` : ""}`,
+          {
             packageId: data.packageId,
             title: data.title,
             dateIssued: data.dateIssued,
-            textSource: null,
-          });
-        }
-
-        return JSON.stringify({
-          summary: `${data.title}: ${data.textLength.toLocaleString()} chars from ${data.textSource}${data.truncated ? ` (truncated to ${(max_length || 15000).toLocaleString()})` : ""}`,
-          packageId: data.packageId,
-          title: data.title,
-          dateIssued: data.dateIssued,
-          pages: data.pages,
-          textSource: data.textSource,
-          textLength: data.textLength,
-          truncated: data.truncated,
-          text: data.text,
-        });
+            pages: data.pages,
+            textSource: data.textSource,
+            textLength: data.textLength,
+            truncated: data.truncated,
+            text: data.text,
+          },
+        );
       } catch (err) {
         const ver = version || "enr";
         const packageId = `BILLS-${congress}${bill_type.toLowerCase()}${bill_number}${ver}`;
-        return JSON.stringify({
-          summary: `Error fetching bill text for ${packageId}`,
-          packageId,
-          error: err instanceof Error ? err.message : String(err),
-          hints: [
-            "Check congress number and bill number",
-            "Try a different version: 'ih' (introduced), 'eh' (engrossed), 'enr' (enrolled)",
-            "The bill may not have reached that stage yet",
-          ],
-        });
+        return recordResponse(
+          `Error fetching bill text for ${packageId}`,
+          {
+            packageId,
+            error: err instanceof Error ? err.message : String(err),
+            hints: [
+              "Check congress number and bill number",
+              "Try a different version: 'ih' (introduced), 'eh' (engrossed), 'enr' (enrolled)",
+              "The bill may not have reached that stage yet",
+            ],
+          },
+        );
       }
     },
   },
@@ -140,12 +138,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ query, page_size }) => {
       const data = await searchCboReports(query, page_size);
-      if (!data.results.length) return JSON.stringify({ summary: `No CBO reports found for "${query}".`, total: 0, results: [] });
-      return JSON.stringify({
-        summary: `CBO/Committee reports for "${query}": ${data.results.length} results`,
-        total: data.total,
-        results: data.results,
-      });
+      if (!data.results.length) return emptyResponse(`No CBO reports found for "${query}".`);
+      return listResponse(
+        `CBO/Committee reports for "${query}": ${data.results.length} results`,
+        { items: data.results, total: data.total },
+      );
     },
   },
 ];

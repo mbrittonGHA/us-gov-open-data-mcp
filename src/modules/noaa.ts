@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { Tool, InputPrompt } from "fastmcp";
 import { listDatasets, searchStations, getClimateData, searchLocations } from "../sdk/noaa.js";
+import { timeseriesResponse, listResponse, emptyResponse } from "../response.js";
 
 // ─── Metadata ────────────────────────────────────────────────────────
 
@@ -50,10 +51,10 @@ export const tools: Tool<any, any>[] = [
     parameters: z.object({}),
     execute: async () => {
       const datasets = await listDatasets();
-      return JSON.stringify({
-        summary: `${datasets.length} NOAA climate datasets available`,
-        datasets,
-      });
+      return listResponse(
+        `${datasets.length} NOAA climate datasets available`,
+        { items: datasets },
+      );
     },
   },
 
@@ -70,10 +71,11 @@ export const tools: Tool<any, any>[] = [
       const stations = await searchStations({
         datasetId: dataset_id, locationId: location_id, limit,
       });
-      return JSON.stringify({
-        summary: `${stations.length} stations found`,
-        stations: stations.slice(0, 50),
-      });
+      if (!stations.length) return emptyResponse("No stations found.");
+      return listResponse(
+        `${stations.length} stations found`,
+        { items: stations },
+      );
     },
   },
 
@@ -95,11 +97,16 @@ export const tools: Tool<any, any>[] = [
         datasetId: dataset_id, startDate: start_date, endDate: end_date,
         stationId: station_id, locationId: location_id, datatypeId: datatype_id, limit,
       });
-      return JSON.stringify({
-        summary: `${result.data.length} of ${result.count} observations, ${start_date} to ${end_date}`,
-        total: result.count,
-        data: result.data.slice(0, 200),
-      });
+      if (!result.data.length) return emptyResponse(`No climate observations found for ${start_date} to ${end_date}.`);
+      return timeseriesResponse(
+        `${result.count} observations, ${start_date} to ${end_date}`,
+        {
+          rows: result.data,
+          dateKey: "date",
+          valueKey: "value",
+          total: result.count,
+        },
+      );
     },
   },
 
@@ -114,10 +121,11 @@ export const tools: Tool<any, any>[] = [
     }),
     execute: async ({ category, dataset_id, limit }) => {
       const locations = await searchLocations({ categoryId: category, datasetId: dataset_id, limit });
-      return JSON.stringify({
-        summary: `${locations.length} locations found`,
-        locations,
-      });
+      if (!locations.length) return emptyResponse("No locations found.");
+      return listResponse(
+        `${locations.length} locations found`,
+        { items: locations },
+      );
     },
   },
 ];
