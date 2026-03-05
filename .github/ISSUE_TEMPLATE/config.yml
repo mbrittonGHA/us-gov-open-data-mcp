@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://us-gov-open-data-mcp.vercel.app/
+    about: Check the docs for guides on adding modules and SDK usage.
