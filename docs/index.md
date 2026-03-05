@@ -3,7 +3,7 @@ layout: home
 hero:
   name: US Government Open Data
   text: MCP Server + TypeScript SDK
-  tagline: 39 federal APIs • 225 tools • Live government data, cross-referenced automatically
+  tagline: 39 federal APIs • 234 tools • Live government data, cross-referenced automatically
   actions:
     - theme: brand
       text: Get Started
