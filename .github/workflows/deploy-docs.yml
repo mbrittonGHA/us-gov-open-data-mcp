@@ -3,6 +3,11 @@ name: Deploy Docs
 on:
   push:
     branches: [main]
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - 'package.json'
+      - 'tsconfig.json'
   workflow_dispatch:
 
 permissions:
