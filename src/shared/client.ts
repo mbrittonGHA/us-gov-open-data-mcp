@@ -56,6 +56,10 @@ export interface ClientConfig {
   /** Timeout in ms (default: 30000) */
   timeoutMs?: number;
 
+  /** Max retries for transient errors (429, 502, 503, 504). Default: 2.
+   *  Increase for notoriously flaky upstream APIs (e.g. FBI CDE). */
+  maxRetries?: number;
+
   /** Custom error detector — some APIs return 200 OK with errors in the body */
   checkError?: (data: unknown) => string | null;
 }
@@ -438,6 +442,7 @@ export function createClient(config: ClientConfig): ApiClient {
     baseUrl, name, auth, defaultHeaders = {},
     cacheTtlMs = 5 * 60 * 1000,
     timeoutMs = 30_000,
+    maxRetries: configMaxRetries = 2,
     checkError,
   } = config;
 
@@ -510,7 +515,7 @@ export function createClient(config: ClientConfig): ApiClient {
     const cached = cache.get(cacheKey);
     if (cached !== undefined) return cached as T;
 
-    const res = await fetchRetry(url, init, timeoutMs, limiter, name);
+    const res = await fetchRetry(url, init, timeoutMs, limiter, name, configMaxRetries);
 
     if (!res.ok) {
       const body = await res.text();

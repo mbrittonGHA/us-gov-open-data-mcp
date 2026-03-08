@@ -20,6 +20,7 @@ const api = createClient({
   auth: { type: "query", envParams: { API_KEY: "DATA_GOV_API_KEY" } },
   rateLimit: { perSecond: 5, burst: 10 },
   cacheTtlMs: 60 * 60 * 1000, // 1 hour — crime data updates infrequently
+  maxRetries: 4, // FBI CDE API is notoriously flaky — extra retries help
 });
 
 // ─── Reference Data ──────────────────────────────────────────────────
