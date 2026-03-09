@@ -1,0 +1,77 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (leave empty for auto CalVer: YYYY.M.D)'
+        required: false
+        type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            BASE=$(date -u +'%Y.%-m.%-d')
+            EXISTING=$(npm view us-gov-open-data-mcp versions --json 2>/dev/null || echo "[]")
+            if echo "$EXISTING" | grep -q "\"$BASE\""; then
+              SUFFIX=2
+              while echo "$EXISTING" | grep -q "\"$BASE-$SUFFIX\""; do
+                SUFFIX=$((SUFFIX + 1))
+              done
+              echo "version=$BASE-$SUFFIX" >> $GITHUB_OUTPUT
+            else
+              echo "version=$BASE" >> $GITHUB_OUTPUT
+            fi
+          fi
+          echo "Publishing version: $(grep version $GITHUB_OUTPUT | cut -d= -f2)"
+
+      - name: Set version
+        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Commit version bump & tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git diff --cached --quiet || git commit -m "release: v${{ steps.version.outputs.version }}"
+          git tag -f "v${{ steps.version.outputs.version }}"
+          git push origin HEAD --tags --force
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          draft: true
+          generate_release_notes: true
