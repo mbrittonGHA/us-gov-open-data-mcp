@@ -2,7 +2,6 @@
  * nhtsa module metadata.
  */
 
-import { type Complaint } from "./sdk.js";
 import type { ModuleMeta } from "../../shared/types.js";
 
 export default {
@@ -10,9 +9,28 @@ export default {
   displayName: "NHTSA",
   category: "Safety",
   description:
-    "National Highway Traffic Safety Administration — vehicle recalls, consumer complaints, VIN decoding, vehicle specifications. No API key required.",
+    "National Highway Traffic Safety Administration — vehicle recalls (1949–present), consumer complaints, " +
+    "5-star safety ratings (NCAP), VIN decoding, product browsing, and car seat inspection station finder. " +
+    "No API key required.",
   workflow:
-    "Use nhtsa_recalls to search for recalls by make/model/year → nhtsa_complaints for consumer complaints → nhtsa_decode_vin to decode a specific VIN → nhtsa_models to browse available models for a make.",
+    "nhtsa_models to discover models for a make → nhtsa_recalls for recalls → " +
+    "nhtsa_recall_detail for campaign details → nhtsa_complaints for consumer complaints → " +
+    "nhtsa_complaint_detail for ODI detail → nhtsa_safety_ratings + nhtsa_safety_rating_detail for crash test ratings → " +
+    "nhtsa_decode_vin for VIN lookup → nhtsa_car_seat_stations for inspection locations",
   tips:
-    "Use common make names like 'honda', 'toyota', 'ford', 'chevrolet', 'tesla'. Model names should match official names: 'civic', 'camry', 'f-150', 'model 3'. VINs are 17 characters.",
+    "Use common make names: 'honda', 'toyota', 'ford', 'chevrolet', 'tesla'. " +
+    "Model names match official names: 'civic', 'camry', 'f-150', 'model 3'. " +
+    "Recalls/complaints require make + model + modelYear (all three). " +
+    "Use nhtsa_models with issue_type='r' to find models that have recalls before querying. " +
+    "VINs are 17 characters. Campaign numbers look like '23V838000'.",
+  reference: {
+    docs: {
+      "NHTSA Datasets & APIs": "https://www.nhtsa.gov/nhtsa-datasets-and-apis",
+      "Recalls API": "https://api.nhtsa.gov/recalls/recallsByVehicle?make=acura&model=rdx&modelYear=2012",
+      "Complaints API": "https://api.nhtsa.gov/complaints/complaintsByVehicle?make=acura&model=rdx&modelYear=2012",
+      "Safety Ratings API": "https://api.nhtsa.gov/SafetyRatings",
+      "VIN Decode (vPIC)": "https://vpic.nhtsa.dot.gov/api/",
+      "Car Seat Stations": "https://api.nhtsa.gov/CSSIStation/state/CA",
+    },
+  },
 } satisfies ModuleMeta;

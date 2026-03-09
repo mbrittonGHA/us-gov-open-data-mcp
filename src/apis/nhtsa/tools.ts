@@ -1,218 +1,316 @@
 /**
- * nhtsa MCP tools.
+ * nhtsa MCP tools — vehicle recalls, complaints, safety ratings, VIN decode, car seat stations.
+ *
+ * Docs: https://www.nhtsa.gov/nhtsa-datasets-and-apis
  */
 
 import { z } from "zod";
 import type { Tool } from "fastmcp";
 import {
-  getRecalls,
-  getComplaints,
-  decodeVin,
-  getModelsForMake,
-  getSafetyRatingVehicles,
-  getSafetyRatingDetail,
-  clearCache as sdkClearCache,
-  type Recall,
-  type Complaint,
+  getRecalls, getRecallByCampaign,
+  getComplaints, getComplaintByOdi,
+  getProductModelYears, getProductMakes, getProductModels,
+  decodeVin, getModelsForMake,
+  getSafetyRatingVehicles, getSafetyRatingDetail,
+  getCarSeatStations,
 } from "./sdk.js";
-import { listResponse, recordResponse, emptyResponse } from "../../shared/response.js";
-
-function recallToRecord(r: Recall): Record<string, unknown> {
-  const record: Record<string, unknown> = {
-    campaignNumber: r.NHTSACampaignNumber ?? null,
-    modelYear: r.ModelYear ?? null,
-    make: r.Make ?? null,
-    model: r.Model ?? null,
-    component: r.Component ?? null,
-    summary: r.Summary ?? null,
-    consequence: r.Consequence ?? null,
-    remedy: r.Remedy ?? null,
-  };
-  if (r.parkIt) record.parkIt = true;
-  return record;
-}
-
-function complaintToRecord(c: Complaint): Record<string, unknown> {
-  const product = c.products?.[0];
-  return {
-    odiNumber: c.odiNumber ?? null,
-    dateOfIncident: c.dateOfIncident ?? c.dateComplaintFiled ?? null,
-    vehicle: product ? `${product.productYear ?? ""} ${product.productMake ?? ""} ${product.productModel ?? ""}`.trim() : null,
-    components: c.components ?? null,
-    summary: c.summary ?? null,
-    crash: c.crash ?? false,
-    fire: c.fire ?? false,
-    numberOfInjuries: c.numberOfInjuries ?? 0,
-    numberOfDeaths: c.numberOfDeaths ?? 0,
-  };
-}
+import { tableResponse, listResponse, recordResponse, emptyResponse } from "../../shared/response.js";
 
 export const tools: Tool<any, any>[] = [
+  // ── Recalls ──────────────────────────────────────────────────────
   {
     name: "nhtsa_recalls",
     description:
-      "Search NHTSA vehicle recalls by make, model, and model year. Returns campaign numbers, affected components, consequences, and remedies.",
+      "Search NHTSA vehicle recalls by make, model, and model year.\n" +
+      "All three parameters are required by the NHTSA API.\n" +
+      "Use nhtsa_models to find valid models for a make, or nhtsa_recall_detail for a specific campaign.\n\n" +
+      "Example: make='tesla', model='model 3', model_year=2024",
     annotations: { title: "NHTSA: Vehicle Recalls", readOnlyHint: true },
     parameters: z.object({
-      make: z.string().describe("Vehicle make (e.g. 'honda', 'toyota', 'ford', 'tesla')"),
-      model: z.string().describe("Vehicle model (e.g. 'civic', 'camry', 'f-150', 'model 3')"),
-      model_year: z.number().describe("Model year (e.g. 2020, 2023)"),
+      make: z.string().describe("Vehicle make: 'toyota', 'ford', 'tesla', 'honda'"),
+      model: z.string().describe("Vehicle model: 'camry', 'f-150', 'model 3', 'civic'"),
+      model_year: z.number().int().describe("Model year: 2020, 2023, 2024"),
     }),
-    execute: async (args) => {
-      const data = await getRecalls({
-        make: args.make,
-        model: args.model,
-        modelYear: args.model_year,
-      });
-      if (!data.length) return emptyResponse("No recalls found for this vehicle.");
-      return listResponse(`${data.length} recall(s) found`, { items: data.map(recallToRecord), total: data.length });
+    execute: async ({ make, model, model_year }) => {
+      const data = await getRecalls({ make, model, modelYear: model_year });
+      if (!data.length) return emptyResponse(`No recalls found for ${model_year} ${make} ${model}.`);
+      return listResponse(
+        `NHTSA recalls: ${data.length} for ${model_year} ${make} ${model}`,
+        {
+          total: data.length,
+          items: data.map(r => ({
+            campaignNumber: r.NHTSACampaignNumber, manufacturer: r.Manufacturer,
+            component: r.Component, summary: r.Summary?.substring(0, 300),
+            consequence: r.Consequence?.substring(0, 200),
+            remedy: r.Remedy?.substring(0, 200),
+            reportDate: r.ReportReceivedDate, parkIt: r.parkIt,
+          })),
+        },
+      );
     },
   },
+
+  {
+    name: "nhtsa_recall_detail",
+    description:
+      "Get recall details by NHTSA campaign number.\n" +
+      "Campaign numbers look like '23V838000' or '12V176000'.\n" +
+      "Returns full recall information including affected vehicles, summary, consequence, and remedy.",
+    annotations: { title: "NHTSA: Recall by Campaign Number", readOnlyHint: true },
+    parameters: z.object({
+      campaign_number: z.string().describe("NHTSA campaign number (e.g. '23V838000', '12V176000')"),
+    }),
+    execute: async ({ campaign_number }) => {
+      const data = await getRecallByCampaign(campaign_number);
+      if (!data.length) return emptyResponse(`No recall found for campaign ${campaign_number}.`);
+      return listResponse(
+        `NHTSA recall campaign ${campaign_number}: ${data.length} affected vehicles`,
+        {
+          total: data.length,
+          items: data.map(r => ({
+            campaignNumber: r.NHTSACampaignNumber, manufacturer: r.Manufacturer,
+            make: r.Make, model: r.Model, modelYear: r.ModelYear,
+            component: r.Component, summary: r.Summary,
+            consequence: r.Consequence, remedy: r.Remedy,
+            reportDate: r.ReportReceivedDate, parkIt: r.parkIt,
+          })),
+        },
+      );
+    },
+  },
+
+  // ── Complaints ───────────────────────────────────────────────────
   {
     name: "nhtsa_complaints",
     description:
-      "Search NHTSA consumer complaints about vehicles. Shows crash/fire/injury/death counts, affected components, and complaint summaries.",
+      "Search NHTSA vehicle complaints by make, model, and model year.\n" +
+      "All three parameters are required by the NHTSA API.\n" +
+      "Use nhtsa_models to find valid models for a make.\n\n" +
+      "Example: make='tesla', model='model 3', model_year=2023",
     annotations: { title: "NHTSA: Vehicle Complaints", readOnlyHint: true },
     parameters: z.object({
-      make: z.string().describe("Vehicle make (e.g. 'honda', 'toyota', 'ford', 'tesla')"),
-      model: z.string().describe("Vehicle model (e.g. 'civic', 'camry', 'f-150', 'model 3')"),
-      model_year: z.number().describe("Model year (e.g. 2020, 2023)"),
+      make: z.string().describe("Vehicle make: 'toyota', 'ford', 'tesla'"),
+      model: z.string().describe("Vehicle model: 'camry', 'f-150', 'model 3'"),
+      model_year: z.number().int().describe("Model year"),
     }),
-    execute: async (args) => {
-      const data = await getComplaints({
-        make: args.make,
-        model: args.model,
-        modelYear: args.model_year,
-      });
-      if (!data.length) return emptyResponse("No complaints found for this vehicle.");
-      const stats = {
-        crashes: data.filter((c) => c.crash).length,
-        fires: data.filter((c) => c.fire).length,
-        injuries: data.reduce((sum, c) => sum + (c.numberOfInjuries ?? 0), 0),
-        deaths: data.reduce((sum, c) => sum + (c.numberOfDeaths ?? 0), 0),
-      };
+    execute: async ({ make, model, model_year }) => {
+      const data = await getComplaints({ make, model, modelYear: model_year });
+      if (!data.length) return emptyResponse(`No complaints found for ${model_year} ${make} ${model}.`);
       return listResponse(
-        `${data.length} complaint(s) — ${stats.crashes} crash(es), ${stats.fires} fire(s), ${stats.injuries} injury(ies), ${stats.deaths} death(s)`,
-        { items: data.map(complaintToRecord), total: data.length },
+        `NHTSA complaints: ${data.length} for ${model_year} ${make} ${model}`,
+        {
+          total: data.length,
+          items: data.slice(0, 30).map(c => ({
+            odiNumber: c.odiNumber, dateOfIncident: c.dateOfIncident, dateFiled: c.dateComplaintFiled,
+            crash: c.crash, fire: c.fire, injuries: c.numberOfInjuries, deaths: c.numberOfDeaths,
+            components: c.components, summary: c.summary?.substring(0, 300),
+          })),
+        },
       );
     },
   },
+
   {
-    name: "nhtsa_decode_vin",
+    name: "nhtsa_complaint_detail",
     description:
-      "Decode a Vehicle Identification Number (VIN) to get vehicle specifications: make, model, year, engine, body class, drive type, fuel type, manufacturer, plant location.",
-    annotations: { title: "NHTSA: VIN Decoder", readOnlyHint: true },
+      "Get a specific complaint by its ODI number.\n" +
+      "ODI numbers are in complaint search results (e.g. 11184030).",
+    annotations: { title: "NHTSA: Complaint by ODI Number", readOnlyHint: true },
     parameters: z.object({
-      vin: z.string().min(11).max(17).describe("Vehicle Identification Number (VIN), 11-17 characters"),
+      odi_number: z.number().int().describe("ODI complaint number (e.g. 11184030)"),
     }),
-    execute: async (args) => {
-      const result = await decodeVin(args.vin);
-      if (result.ErrorCode && result.ErrorCode !== "0") {
-        return emptyResponse(`VIN decode error: ${result.ErrorText ?? "Unknown error"}`);
-      }
-      const record: Record<string, unknown> = {
-        Make: result.Make,
-        Model: result.Model,
-        Year: result.ModelYear,
-        Manufacturer: result.Manufacturer,
-        VehicleType: result.VehicleType,
-        BodyClass: result.BodyClass,
-        DriveType: result.DriveType,
-        FuelType: result.FuelTypePrimary,
-        Engine: result.EngineModel,
-        Cylinders: result.EngineCylinders,
-        DisplacementL: result.DisplacementL,
-        Transmission: result.TransmissionStyle,
-        PlantCity: result.PlantCity,
-        PlantCountry: result.PlantCountry,
-      };
-      // Remove undefined/null fields
-      for (const key of Object.keys(record)) {
-        if (record[key] == null) delete record[key];
-      }
-      if (!Object.keys(record).length) return emptyResponse("No data returned for this VIN.");
-      return recordResponse(`VIN ${args.vin}: ${record.Year ?? ""} ${record.Make ?? ""} ${record.Model ?? ""}`.trim(), record);
+    execute: async ({ odi_number }) => {
+      const data = await getComplaintByOdi(odi_number);
+      if (!data) return emptyResponse(`No complaint found for ODI ${odi_number}.`);
+      return recordResponse(`NHTSA complaint ODI #${odi_number}`, data as Record<string, unknown>);
     },
   },
+
+  // ── Product Browsing ─────────────────────────────────────────────
+  {
+    name: "nhtsa_model_years",
+    description:
+      "List model years that have recalls or complaints in the NHTSA database.\n" +
+      "Use issue_type='r' for recalls (1949–present), 'c' for complaints.\n" +
+      "Useful for discovering available data before querying.",
+    annotations: { title: "NHTSA: Available Model Years", readOnlyHint: true },
+    parameters: z.object({
+      issue_type: z.enum(["r", "c"]).describe("'r' for recalls, 'c' for complaints"),
+    }),
+    execute: async ({ issue_type }) => {
+      const data = await getProductModelYears(issue_type);
+      if (!data.length) return emptyResponse("No model years found.");
+      return tableResponse(
+        `NHTSA model years (${issue_type === "r" ? "recalls" : "complaints"}): ${data.length} years`,
+        { rows: data as Record<string, unknown>[] },
+      );
+    },
+  },
+
+  {
+    name: "nhtsa_makes",
+    description:
+      "List vehicle makes for a model year that have recalls or complaints.\n" +
+      "Use issue_type='r' for recalls, 'c' for complaints.\n\n" +
+      "Example: model_year=2024, issue_type='r'",
+    annotations: { title: "NHTSA: Makes for Model Year", readOnlyHint: true },
+    parameters: z.object({
+      model_year: z.number().int().describe("Model year"),
+      issue_type: z.enum(["r", "c"]).describe("'r' for recalls, 'c' for complaints"),
+    }),
+    execute: async ({ model_year, issue_type }) => {
+      const data = await getProductMakes({ modelYear: model_year, issueType: issue_type });
+      if (!data.length) return emptyResponse(`No makes with ${issue_type === "r" ? "recalls" : "complaints"} for ${model_year}.`);
+      return tableResponse(
+        `NHTSA makes for ${model_year} (${issue_type === "r" ? "recalls" : "complaints"}): ${data.length}`,
+        { rows: data as Record<string, unknown>[] },
+      );
+    },
+  },
+
   {
     name: "nhtsa_models",
     description:
-      "Get all models available for a given vehicle make, optionally filtered by model year. Useful for discovering valid model names before searching recalls/complaints.",
-    annotations: { title: "NHTSA: Vehicle Models", readOnlyHint: true },
+      "List vehicle models for a make and year that have recalls or complaints.\n" +
+      "Or list all models for a make from the vPIC database (omit issue_type).\n\n" +
+      "Example: make='tesla', model_year=2024, issue_type='r'",
+    annotations: { title: "NHTSA: Models for Make", readOnlyHint: true },
     parameters: z.object({
-      make: z.string().describe("Vehicle make (e.g. 'honda', 'toyota', 'ford')"),
-      model_year: z.number().optional().describe("Optional model year filter"),
+      make: z.string().describe("Vehicle make: 'toyota', 'ford', 'tesla'"),
+      model_year: z.number().int().optional().describe("Model year (optional for vPIC lookup)"),
+      issue_type: z.enum(["r", "c"]).optional().describe("'r' for recalls, 'c' for complaints. Omit for general model list."),
     }),
-    execute: async (args) => {
-      const data = await getModelsForMake({
-        make: args.make,
-        modelYear: args.model_year,
+    execute: async ({ make, model_year, issue_type }) => {
+      if (issue_type && model_year) {
+        const data = await getProductModels({ modelYear: model_year, make, issueType: issue_type });
+        if (!data.length) return emptyResponse(`No ${make} models with ${issue_type === "r" ? "recalls" : "complaints"} for ${model_year}.`);
+        return tableResponse(
+          `NHTSA ${make} models for ${model_year} (${issue_type === "r" ? "recalls" : "complaints"}): ${data.length}`,
+          { rows: data as Record<string, unknown>[] },
+        );
+      }
+      const data = await getModelsForMake({ make, modelYear: model_year });
+      if (!data.length) return emptyResponse(`No models found for ${make}.`);
+      return tableResponse(
+        `${make} models${model_year ? ` (${model_year})` : ""}: ${data.length}`,
+        { rows: data as Record<string, unknown>[] },
+      );
+    },
+  },
+
+  // ── VIN Decode ───────────────────────────────────────────────────
+  {
+    name: "nhtsa_decode_vin",
+    description:
+      "Decode a Vehicle Identification Number (VIN) to get specifications.\n" +
+      "Returns make, model, year, engine, body class, drive type, plant info.\n" +
+      "VINs are 17 characters.",
+    annotations: { title: "NHTSA: VIN Decode", readOnlyHint: true },
+    parameters: z.object({
+      vin: z.string().min(11).max(17).describe("Vehicle Identification Number (17 characters)"),
+    }),
+    execute: async ({ vin }) => {
+      const data = await decodeVin(vin);
+      if (!data || data.ErrorCode === "0") return emptyResponse(`Could not decode VIN: ${vin}`);
+      return recordResponse(`VIN ${vin}`, {
+        make: data.Make, model: data.Model, year: data.ModelYear,
+        manufacturer: data.Manufacturer, vehicleType: data.VehicleType,
+        bodyClass: data.BodyClass, driveType: data.DriveType,
+        fuelType: data.FuelTypePrimary, engine: data.EngineModel,
+        cylinders: data.EngineCylinders, displacement: data.DisplacementL,
+        transmission: data.TransmissionStyle,
+        plantCity: data.PlantCity, plantCountry: data.PlantCountry,
       });
-      if (!data.length) return emptyResponse(`No models found for make '${args.make}'.`);
-      const items = data.map((m) => ({ Model_Name: m.Model_Name }));
-      return listResponse(
-        `${data.length} model(s) for ${args.make}${args.model_year ? ` (${args.model_year})` : ""}`,
-        { items, total: data.length },
+    },
+  },
+
+  // ── Safety Ratings ───────────────────────────────────────────────
+  {
+    name: "nhtsa_safety_ratings",
+    description:
+      "Search NHTSA 5-star safety ratings (NCAP) by make, model, and year.\n" +
+      "Returns vehicle variants with VehicleId. Use the VehicleId with nhtsa_safety_rating_detail.\n\n" +
+      "Ratings: 5 stars = highest, 1 star = lowest. Data from 1990 to present.",
+    annotations: { title: "NHTSA: Safety Ratings Search", readOnlyHint: true },
+    parameters: z.object({
+      make: z.string().describe("Vehicle make: 'honda', 'toyota', 'ford'"),
+      model: z.string().describe("Vehicle model: 'civic', 'camry', 'f-150'"),
+      model_year: z.number().int().describe("Model year"),
+    }),
+    execute: async ({ make, model, model_year }) => {
+      const vehicles = await getSafetyRatingVehicles({ make, model, modelYear: model_year });
+      if (!vehicles.length) return emptyResponse(`No safety ratings for ${model_year} ${make} ${model}.`);
+      return tableResponse(
+        `NHTSA safety rated variants: ${vehicles.length} for ${model_year} ${make} ${model}`,
+        { rows: vehicles as Record<string, unknown>[] },
       );
     },
   },
 
   {
-    name: "nhtsa_safety_ratings",
+    name: "nhtsa_safety_rating_detail",
     description:
-      "Get NHTSA 5-star safety ratings for a vehicle.\n" +
-      "Shows overall rating, frontal crash, side crash, rollover risk, and safety technology (ESC, forward collision warning, lane departure warning).\n" +
-      "Also shows complaint, recall, and investigation counts for the vehicle.",
-    annotations: { title: "NHTSA: Safety Ratings", readOnlyHint: true },
+      "Get detailed NHTSA 5-star safety ratings for a specific vehicle variant.\n" +
+      "Requires a VehicleId from nhtsa_safety_ratings search results.\n" +
+      "Returns crash test ratings, rollover risk, and safety technology assessments.",
+    annotations: { title: "NHTSA: Safety Rating Detail", readOnlyHint: true },
     parameters: z.object({
-      make: z.string().describe("Vehicle make: 'honda', 'toyota', 'ford', 'tesla'"),
-      model: z.string().describe("Vehicle model: 'civic', 'camry', 'f-150', 'model 3'"),
-      model_year: z.number().describe("Model year: 2020, 2023, 2024"),
+      vehicle_id: z.number().int().describe("VehicleId from safety ratings search (e.g. 19950)"),
     }),
-    execute: async (args) => {
-      const vehicles = await getSafetyRatingVehicles({ make: args.make, model: args.model, modelYear: args.model_year });
-      if (!vehicles.length) return emptyResponse(`No safety ratings found for ${args.model_year} ${args.make} ${args.model}. Try different spelling or year.`);
+    execute: async ({ vehicle_id }) => {
+      const data = await getSafetyRatingDetail(vehicle_id);
+      if (!data) return emptyResponse(`No safety rating found for VehicleId ${vehicle_id}.`);
+      return recordResponse(
+        `Safety rating: ${data.VehicleDescription ?? `VehicleId ${vehicle_id}`}`,
+        {
+          overallRating: data.OverallRating,
+          frontCrash: data.OverallFrontCrashRating,
+          frontCrashDriver: data.FrontCrashDriversideRating,
+          frontCrashPassenger: data.FrontCrashPassengersideRating,
+          sideCrash: data.OverallSideCrashRating,
+          sideCrashDriver: data.SideCrashDriversideRating,
+          sideCrashPassenger: data.SideCrashPassengersideRating,
+          rollover: data.RolloverRating,
+          rolloverRisk: data.RolloverPossibility,
+          electronicStabilityControl: data.NHTSAElectronicStabilityControl,
+          forwardCollisionWarning: data.NHTSAForwardCollisionWarning,
+          laneDepartureWarning: data.NHTSALaneDepartureWarning,
+          complaintsCount: data.ComplaintsCount,
+          recallsCount: data.RecallsCount,
+          investigationsCount: data.InvestigationCount,
+        },
+      );
+    },
+  },
 
-      // Get detailed ratings for each variant
-      const details = [];
-      for (const v of vehicles.slice(0, 5)) {
-        if (v.VehicleId) {
-          const rating = await getSafetyRatingDetail(v.VehicleId);
-          if (rating) details.push(rating);
-        }
-      }
-
-      if (!details.length) {
-        const items = vehicles.map(v => ({ VehicleDescription: v.VehicleDescription, VehicleId: v.VehicleId }));
-        return listResponse(
-          `${vehicles.length} variant(s) found, no detailed ratings available yet`,
-          { items, total: vehicles.length },
-        );
-      }
-
-      const items = details.map(r => ({
-        VehicleDescription: r.VehicleDescription ?? null,
-        OverallRating: r.OverallRating ?? null,
-        FrontCrashDriverside: r.FrontCrashDriversideRating ?? null,
-        FrontCrashPassengerside: r.FrontCrashPassengersideRating ?? null,
-        OverallFrontCrash: r.OverallFrontCrashRating ?? null,
-        SideCrashDriverside: r.SideCrashDriversideRating ?? null,
-        SideCrashPassengerside: r.SideCrashPassengersideRating ?? null,
-        OverallSideCrash: r.OverallSideCrashRating ?? null,
-        RolloverRating: r.RolloverRating ?? null,
-        RolloverPossibility: r.RolloverPossibility ?? null,
-        SidePoleCrash: r.SidePoleCrashRating ?? null,
-        ESC: r.NHTSAElectronicStabilityControl ?? null,
-        ForwardCollisionWarning: r.NHTSAForwardCollisionWarning ?? null,
-        LaneDepartureWarning: r.NHTSALaneDepartureWarning ?? null,
-        ComplaintsCount: r.ComplaintsCount ?? null,
-        RecallsCount: r.RecallsCount ?? null,
-        InvestigationCount: r.InvestigationCount ?? null,
-      }));
-
+  // ── Car Seat Inspection Stations ─────────────────────────────────
+  {
+    name: "nhtsa_car_seat_stations",
+    description:
+      "Find car seat inspection stations near a location.\n" +
+      "Search by ZIP code, state, or geographic coordinates.\n" +
+      "Car seat inspection stations help parents verify proper installation.\n\n" +
+      "Example: state='CA', or zip='90210', or lat=30.18 + long=-96.39 + miles=50",
+    annotations: { title: "NHTSA: Car Seat Inspection Stations", readOnlyHint: true },
+    parameters: z.object({
+      zip: z.string().optional().describe("ZIP code (e.g. '90210')"),
+      state: z.string().max(2).optional().describe("Two-letter state code (e.g. 'CA', 'TX')"),
+      lat: z.number().optional().describe("Latitude for geo search"),
+      long: z.number().optional().describe("Longitude for geo search"),
+      miles: z.number().optional().describe("Search radius in miles (default 25, used with lat/long)"),
+    }),
+    execute: async ({ zip, state, lat, long: lng, miles }) => {
+      const data = await getCarSeatStations({ zip, state, lat, long: lng, miles });
+      if (!data.length) return emptyResponse("No car seat inspection stations found for this location.");
       return listResponse(
-        `NHTSA Safety Ratings for ${args.model_year} ${args.make} ${args.model}: ${details.length} variant(s)`,
-        { items, total: details.length },
+        `Car seat inspection stations: ${data.length} found`,
+        {
+          total: data.length,
+          items: data.slice(0, 50).map(s => ({
+            name: s.name, address: s.address, city: s.city,
+            state: s.state, zip: s.zip, phone: s.phone,
+          })),
+        },
       );
     },
   },

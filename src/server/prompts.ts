@@ -419,26 +419,41 @@ export const analysisPrompts: InputPrompt<any, any>[] = [
 
   {
     name: "vehicle_investigation",
-    description: "Investigate a vehicle make/model for safety recalls, consumer complaints, crash data, and manufacturer lobbying.",
+    description: "Investigate a vehicle make/model for safety recalls, consumer complaints, crash ratings, and manufacturer lobbying.",
     arguments: [
       { name: "make", description: "Vehicle make (e.g. 'Tesla', 'Toyota', 'Ford')", required: true },
       { name: "model", description: "Vehicle model (e.g. 'Model 3', 'Camry', 'F-150')", required: false },
+      { name: "model_year", description: "Model year (e.g. 2024). Required for recalls/complaints.", required: false },
     ],
-    load: async ({ make, model }) =>
-      `Investigate vehicle safety: ${make}${model ? ` ${model}` : ""}:\n\n` +
-      "RECALLS:\n" +
-      `- nhtsa_recalls make='${make}'${model ? ` model='${model}'` : ""} — all safety recalls\n` +
-      "- Note recall counts, components affected, and severity\n\n" +
-      "CONSUMER COMPLAINTS:\n" +
-      `- nhtsa_complaints make='${make}'${model ? ` model='${model}'` : ""} — crash, fire, injury reports\n` +
-      "- Summarize most common complaint types\n\n" +
-      "VIN DECODE (if specific vehicle):\n" +
-      "- nhtsa_decode_vin — full vehicle specs from VIN\n\n" +
-      "MANUFACTURER CONTEXT:\n" +
-      `- lobbying_search registrant_name='${make}' — lobbying on auto safety regulations\n` +
-      `- fec_search_committees name='${make}' committee_type='Q' — manufacturer PAC\n\n` +
-      "Present recall and complaint trends. Are problems getting better or worse? " +
-      "Compare complaint rates to industry norms where possible.",
+    load: async ({ make, model, model_year }) => {
+      const yr = model_year ?? new Date().getFullYear();
+      return `Investigate vehicle safety: ${make}${model ? ` ${model}` : ""} (${yr}):\n\n` +
+        "DISCOVER MODELS (if model not specified):\n" +
+        `- nhtsa_models make='${make}' model_year=${yr} issue_type='r' — find models with recalls\n` +
+        `- nhtsa_models make='${make}' model_year=${yr} issue_type='c' — find models with complaints\n\n` +
+        "RECALLS:\n" +
+        (model
+          ? `- nhtsa_recalls make='${make}' model='${model}' model_year=${yr} — safety recalls\n`
+          : `- After discovering models above, call nhtsa_recalls for each model\n`) +
+        "- nhtsa_recall_detail for any campaign numbers found — full recall details\n\n" +
+        "CONSUMER COMPLAINTS:\n" +
+        (model
+          ? `- nhtsa_complaints make='${make}' model='${model}' model_year=${yr} — crash, fire, injury reports\n`
+          : `- After discovering models, call nhtsa_complaints for each model\n`) +
+        "- nhtsa_complaint_detail for any ODI numbers of interest\n\n" +
+        "SAFETY RATINGS:\n" +
+        (model
+          ? `- nhtsa_safety_ratings make='${make}' model='${model}' model_year=${yr} — find vehicle variants\n` +
+            "- nhtsa_safety_rating_detail for each VehicleId — crash test stars, rollover risk\n\n"
+          : "- After discovering models, check safety ratings for each\n\n") +
+        "VIN DECODE (if specific vehicle):\n" +
+        "- nhtsa_decode_vin — full vehicle specs from VIN\n\n" +
+        "MANUFACTURER CONTEXT:\n" +
+        `- lobbying_search registrant_name='${make}' — lobbying on auto safety regulations\n` +
+        `- fec_search_committees name='${make}' committee_type='Q' — manufacturer PAC\n\n` +
+        "Present recall and complaint trends. Are problems getting better or worse? " +
+        "Compare safety ratings to competitors. Note any 'park it' recalls (immediate danger).";
+    },
   },
 
   {

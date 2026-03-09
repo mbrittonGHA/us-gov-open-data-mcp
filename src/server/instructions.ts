@@ -44,7 +44,7 @@ UNEMPLOYMENT → DOL(ui_claims_national,ui_claims_state) + FRED(UNRATE,PAYEMS) +
 
 DISASTERS → FEMA(declarations,housing_assistance,public_assistance) + NOAA(weather) + USGS(earthquakes) + USAspending(FEMA) + Census(population→per-capita) + Congress(disaster bills,votes)
 EARTHQUAKES/WATER → USGS(earthquakes,water_data,water_sites) + FEMA(declarations) + NOAA(precipitation) + EPA(facilities,drinking_water,superfund) + CDC(health impacts)
-VEHICLE SAFETY → NHTSA(recalls,complaints,safety_ratings,decode_vin) + NREL(EV chargers) + EPA(emissions)
+VEHICLE SAFETY → NHTSA(recalls,recall_detail,complaints,complaint_detail,safety_ratings,safety_rating_detail,decode_vin,models,car_seat_stations) + NREL(EV chargers) + EPA(emissions)
 FDA SUBSTANCE/INGREDIENT LOOKUP → FDA(substance,unii,drug_ndc) + ClinicalTrials(search by ingredient) + NIH(projects by substance)
 TRANSPORTATION → BTS(transport_stats,border_crossings) + EIA(fuel prices) + BLS(cpi transportation) + USAspending(DOT) + NHTSA + NREL + Congress(infrastructure bills)
 PATENTS → USPTO(search_applications,application_details,ptab_proceedings,ptab_decisions) + SEC(company financials) + USAspending(R&D) + WorldBank(R&D spending)
