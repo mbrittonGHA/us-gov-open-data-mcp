@@ -13,6 +13,7 @@
  */
 
 import { createClient } from "../../shared/client.js";
+import he from "he";
 
 // ─── Client ──────────────────────────────────────────────────────────
 
@@ -107,18 +108,10 @@ async function fetchRawText(url: string): Promise<string | null> {
   }
 }
 
-/** Strip HTML wrapper tags and normalize whitespace. GovInfo bill text is pre-formatted
+/** Strip HTML wrapper tags and decode entities. GovInfo bill text is pre-formatted
  *  inside `<html><body><pre>...</pre></body></html>`, so this just removes those tags. */
 function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .trim();
+  return he.decode(html.replace(/<[^>]+>/g, "")).trim();
 }
 
 // ─── Public API ──────────────────────────────────────────────────────

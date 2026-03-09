@@ -16,7 +16,7 @@ import {
   type DojPressRelease,
   type DojBlogEntry,
 } from "./sdk.js";
-import { listResponse, recordResponse, emptyResponse } from "../../shared/response.js";
+import { listResponse, recordResponse, emptyResponse, cleanHtml } from "../../shared/response.js";
 
 function parseUnixDate(unixStr: string | undefined): string {
   if (!unixStr) return "?";
@@ -37,12 +37,12 @@ function summarizeBlog(blog: DojBlogEntry): string {
   const components = blog.component?.map(c => c.name).join(", ");
   if (components) parts.push(`Component: ${components}`);
   if (blog.topic) {
-    const cleanTopic = String(blog.topic).replace(/<[^>]+>/g, "").trim();
+    const cleanTopic = cleanHtml(blog.topic);
     if (cleanTopic) parts.push(`Topic: ${cleanTopic}`);
   }
   if (blog.url) parts.push(`URL: ${blog.url}`);
   if (blog.teaser) {
-    const cleanTeaser = String(blog.teaser).replace(/<[^>]+>/g, "").trim().slice(0, 300);
+    const cleanTeaser = cleanHtml(blog.teaser).slice(0, 300);
     if (cleanTeaser) parts.push(`Summary: ${cleanTeaser}`);
   }
   return parts.join("\n");
@@ -107,8 +107,7 @@ export const tools: Tool<any, any>[] = [
       if (!results.length) return emptyResponse(`No press release found with UUID: ${uuid}`);
       const pr = results[0];
       const cleanBody = pr.body
-        ? String(pr.body).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&")
-            .replace(/&nbsp;/g, " ").replace(/\n{3,}/g, "\n\n").trim()
+        ? cleanHtml(pr.body)
         : null;
       return recordResponse(
         pr.title ?? "Untitled",
@@ -156,9 +155,9 @@ export const tools: Tool<any, any>[] = [
             title: blog.title,
             date: parseUnixDate(blog.date),
             components: blog.component?.map(c => c.name),
-            topic: blog.topic ? String(blog.topic).replace(/<[^>]+>/g, "").trim() : undefined,
+            topic: blog.topic ? cleanHtml(blog.topic) : undefined,
             url: blog.url,
-            teaser: blog.teaser ? String(blog.teaser).replace(/<[^>]+>/g, "").trim().slice(0, 300) : undefined,
+            teaser: blog.teaser ? cleanHtml(blog.teaser).slice(0, 300) : undefined,
           })),
         },
       );
@@ -180,8 +179,7 @@ export const tools: Tool<any, any>[] = [
       if (!results.length) return emptyResponse(`No blog entry found with UUID: ${uuid}`);
       const blog = results[0];
       const cleanBody = blog.body
-        ? String(blog.body).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&")
-            .replace(/&nbsp;/g, " ").replace(/\n{3,}/g, "\n\n").trim()
+        ? cleanHtml(blog.body)
         : null;
       return recordResponse(
         blog.title ?? "Untitled",
@@ -189,7 +187,7 @@ export const tools: Tool<any, any>[] = [
           title: blog.title,
           date: parseUnixDate(blog.date),
           components: blog.component?.map(c => c.name),
-          topic: blog.topic ? String(blog.topic).replace(/<[^>]+>/g, "").trim() : undefined,
+          topic: blog.topic ? cleanHtml(blog.topic) : undefined,
           url: blog.url,
           body: cleanBody,
         },

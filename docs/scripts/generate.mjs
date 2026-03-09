@@ -87,9 +87,9 @@ function truncate(s, max = 120) {
   return s.slice(0, cut > 0 ? cut : max) + "...";
 }
 
-/** Escape pipe characters for markdown tables */
+/** Escape pipe and backslash characters for markdown tables */
 function escPipe(s) {
-  return s.replace(/\|/g, "\\|");
+  return s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 const grouped = groupByCategory(modules);

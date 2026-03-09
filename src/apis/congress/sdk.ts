@@ -9,6 +9,7 @@
  */
 
 import { createClient, qp } from "../../shared/client.js";
+import he from "he";
 export * from "./types.js";
 import type {
   CongressBill, CongressBillDetail, CongressCosponsor, CongressBillTitle,
@@ -479,8 +480,8 @@ function parseHouseVoteIndex(html: string, limit: number): CongressVoteSummary[]
     const cells: string[] = [];
     let cellMatch;
     while ((cellMatch = cellPattern.exec(row)) !== null) {
-      // Strip all HTML tags, collapse whitespace
-      cells.push(cellMatch[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim());
+      // Strip all HTML tags, decode entities, collapse whitespace
+      cells.push(he.decode(cellMatch[1].replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim());
     }
 
     if (cells.length < 6) continue;
@@ -1512,7 +1513,10 @@ export async function getBillVotes(
     if (!action.recordedVotes) continue;
     for (const rv of action.recordedVotes) {
       if (!rv.rollNumber) continue;
-      const chamber = rv.chamber?.toLowerCase() ?? (rv.url?.includes("senate.gov") ? "senate" : "house");
+      const chamber = rv.chamber?.toLowerCase() ?? (() => {
+        try { return new URL(rv.url ?? "").hostname.endsWith("senate.gov") ? "senate" : "house"; }
+        catch { return "house"; }
+      })();
       if (chamber === "senate") {
         senateRolls.push({ rollNumber: rv.rollNumber, date: rv.date ?? action.actionDate, session: rv.sessionNumber });
       } else {

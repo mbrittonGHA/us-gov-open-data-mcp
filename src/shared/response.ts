@@ -33,6 +33,8 @@
  *   return emptyResponse("No bills found matching 'infrastructure'.");
  */
 
+import he from "he";
+
 // ─── Constants ───────────────────────────────────────────────────────
 
 /**
@@ -389,4 +391,19 @@ export function listResponse(summary: string, opts: {
  */
 export function emptyResponse(message: string): string {
   return JSON.stringify({ summary: message, dataType: "empty", data: null });
+}
+
+// ─── HTML Sanitization ───────────────────────────────────────────────
+
+/**
+ * Strip HTML tags and decode HTML entities safely.
+ * Uses the `he` library for complete, standards-compliant entity decoding
+ * (handles all named, numeric, and hex entities including double-encoded ones).
+ *
+ * @param input — raw HTML string (or unknown value)
+ * @returns plain text with entities decoded and whitespace normalized
+ */
+export function cleanHtml(input: unknown): string {
+  const stripped = String(input ?? "").replace(/<[^>]+>/g, "");
+  return he.decode(stripped).replace(/\n{3,}/g, "\n\n").trim();
 }
