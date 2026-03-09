@@ -8,6 +8,7 @@ export default withMermaid(defineConfig({
   description:
     "MCP server + TypeScript SDK for 40+ U.S. government APIs",
   base: "/us-gov-open-data-mcp/",
+  lastUpdated: true,
 
   head: [
     [
