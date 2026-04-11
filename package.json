@@ -106,8 +106,8 @@
   "type": "module",
   "dependencies": {
     "dotenv": "^17.3.1",
-    "fast-xml-parser": "^5.4.1",
-    "fastmcp": "^3.34.0",
+    "fast-xml-parser": "^5.5.11",
+    "fastmcp": "^3.35.0",
     "he": "^1.2.0",
     "quickjs-emscripten": "^0.32.0",
     "zod": "^4.3.6"
@@ -115,13 +115,13 @@
   "devDependencies": {
     "@types/he": "^1.2.3",
     "@types/node": "^25.3.0",
-    "mermaid": "^11.13.0",
+    "mermaid": "^11.14.0",
     "typedoc": "^0.28.17",
     "typedoc-plugin-markdown": "^4.10.0",
     "typedoc-vitepress-theme": "^1.1.2",
     "typescript": "^5.9.3",
     "vitepress": "^1.6.4",
     "vitepress-plugin-mermaid": "^2.0.17",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.4"
   }
 }
